@@ -6,39 +6,38 @@ import numpy as np
 from mathutils.geometry import intersect_line_plane
 
 bl_info = {
-    "name": "q_p :)",
-    "location": "View3D > Add > Object > q_p,",
-    "description": "Interactive creation of primitives.",
-    "author": "Vladislav Kindushov, 1 more cool uncle, but I did not ask his nickname ",
-    "version": (0, 0, 1),
-    "blender": (2, 7, 9),
-    "category": "Object",
+	"name": "q_p :)",
+	"location": "View3D > Add > Object > q_p,",
+	"description": "Interactive creation of primitives.",
+	"author": "Vladislav Kindushov, 1 more cool uncle, but I did not ask his nickname ",
+	"version": (0, 0, 1),
+	"blender": (2, 7, 9),
+	"category": "Object",
 }
 
-def get_pos3d(context, event, point=False, normal=False): 
+
+def get_pos3d(context, event, point=False, normal=False, revers=False): 
 	""" 
 	convert mouse pos to 3d point over plane defined by origin and normal 
 	""" 
+	# get the context arguments
 	region = bpy.context.region 
 	rv3d = bpy.context.region_data 
 	coord = event.mouse_region_x, event.mouse_region_y
-	#rM = context.active_object.matrix_world.to_3x3() 
 	view_vector_mouse = view3d_utils.region_2d_to_vector_3d(region, rv3d,coord)
 	ray_origin_mouse = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
-	if not point and not normal:
-		pt = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, Vector((0.0, 0.0, 0.0)), Vector((0.0, 0.0, 1.0)), False)
-	else:
-		pt = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, point, normal, False)
-	if not pt is None:
-		bpy.context.scene.cursor_location = pt
 
-def SetCursor(context, event):
-	scene = context.scene
-	region = context.region
-	rv3d = context.region_data
-	coord = event.mouse_region_x, event.mouse_region_y
-	view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-	scene.cursor_location = view3d_utils.region_2d_to_location_3d(region, rv3d, coord, view_vector)
+	# get coord by plane
+	if not point and not normal:
+		pointLoc = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, Vector((0.0, 0.0, 0.0)), Vector((0.0, 0.0, 1.0)), False)
+	else:
+		if not revers:
+			pointLoc = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, point, normal, False)
+		else:
+			pointLoc = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, point, normal, True)
+
+	if not pointLoc is None:
+		context.scene.cursor_location = pointLoc
 
 def RayCast(self, context, event, ray_max=1000.0, snap=False):
 	"""Run this function on left mouse, execute the ray cast"""
@@ -57,7 +56,7 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 	def visible_objects_and_duplis():
 		"""Loop over (object, matrix) pairs (mesh only)"""
 
-		for obj in context.visible_objects:
+		for obj in  reversed(context.visible_objects):
 			if obj.type == 'MESH':
 				yield (obj, obj.matrix_world.copy())
 
@@ -70,6 +69,7 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 
 			obj.dupli_list_clear()
 
+
 	def obj_ray_cast(obj, matrix):
 		"""Wrapper for ray casting that moves the ray into object space"""
 
@@ -80,10 +80,10 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 		ray_direction_obj = ray_target_obj - ray_origin_obj
 		d = ray_direction_obj.length
 
-		ray_direction_obj.normalize()
+		ray_direction_obj.normalized()
 
 		success, location, normal, face_index = obj.ray_cast(ray_origin_obj, ray_direction_obj)
-
+		print("Face", face_index)
 		if face_index != -1:
 			return location, normal, face_index
 		else:
@@ -103,7 +103,7 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 			if hit is not None:
 				hit_world = matrix * hit
 				scene.cursor_location = hit_world
-				length_squared = (hit_world - ray_origin).length_squared
+				length_squared = (hit_world - ray_origin).length
 				if best_obj is None or length_squared < best_length_squared:
 					best_length_squared = length_squared
 					best_obj = obj
@@ -111,15 +111,17 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 					best_face = face_index
 					best_hit = hit
 					break
+	if not snap:
+		return best_face, best_obj
 
 	def run(best_obj, best_matrix, best_face, best_hit):
 		best_distance = float("inf")  # use float("inf") (infinity) to have unlimited search range
-
+		print("Face", face_index)
 		mesh = best_obj.data
-		best_matrix = best_obj.matrix_world
+		#best_matrix = best_obj.matrix_world
 		for vert_index in mesh.polygons[best_face].vertices:
 			vert_coord = mesh.vertices[vert_index].co
-			distance = (vert_coord - best_hit).magnitude
+			distance = (vert_coord - best_hit).length
 			if distance < best_distance:
 				best_distance = distance
 				scene.cursor_location = best_matrix * vert_coord
@@ -128,82 +130,157 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 			p0 = mesh.vertices[v0].co
 			p1 = mesh.vertices[v1].co
 			p = (p0 + p1) / 2
-			distance = (p - best_hit).magnitude
+			distance = (p - best_hit).length
 			if distance < best_distance:
 				best_distance = distance
 				scene.cursor_location = best_matrix * p
 
 		face_pos = Vector(mesh.polygons[best_face].center)
-		distance = (face_pos - best_hit).magnitude
+		distance = (face_pos - best_hit).length
 		if distance < best_distance:
 			best_distance = distance
 			scene.cursor_location = best_matrix * face_pos
 
-	if snap:
-		run(best_obj, best_matrix, best_face, best_hit)
 
-	return best_face, best_obj
+	if not best_face is None and not best_obj is None:
+		run(best_obj, best_matrix, best_face, best_hit)
+		return best_face, best_obj
+	else:
+		return None, None
 
 def Rotation(self, context, face, obj):
-	bpy.context.scene.objects.active = obj
-	bpy.ops.object.mode_set(mode='EDIT')
-	bpy.ops.mesh.select_all(action='DESELECT')
-	bm = bmesh.from_edit_mesh(obj.data)
+	"""Rotation new object by source face"""
+	mesh = self.ray_obj.to_mesh(context.scene, apply_modifiers=True, settings='PREVIEW')
+	mw = self.ray_obj.matrix_world.copy()
+	bm = bmesh.new()
+	bm.from_mesh(mesh)
 	bm.faces.ensure_lookup_table()
-	bm.faces[face].select = True
-	bpy.ops.transform.create_orientation(name = 'sosok', use = False, overwrite = True)
-	bpy.ops.object.mode_set(mode='OBJECT')
-	bpy.context.scene.objects.active = self.new_obj
-	self.new_obj.matrix_world  = context.scene.orientations['sosok'].matrix.to_4x4().copy()
+	face = bm.faces[self.ray_faca]
+	o = face.calc_center_median()
+	def rot(face,o,obj, mw, axis_dst2):
+	
+		axis_src = face.normal
+		axis_src2 = face.calc_tangent_edge()
+		axis_dst = Vector((0, 0, 1))
+		
+		vec2 = axis_src * mw.inverted()
+		matrix_rotate = axis_dst.rotation_difference(vec2).to_matrix().to_4x4()
+		
+		vec1 = axis_src2 * mw.inverted()
+		axis_dst2 = axis_dst2 * matrix_rotate.inverted()
+		mat_tmp = axis_dst2.rotation_difference(vec1).to_matrix().to_4x4()
+		matrix_rotate = mat_tmp*matrix_rotate
+		matrix_translation = Matrix.Translation(mw * o)
+		
+		self.new_obj.matrix_world = matrix_translation * matrix_rotate.to_4x4()
+
+	rot(face,o,self.new_obj, self.ray_obj.matrix_world, Vector((1, 0, 0)))
+
+	if self.ray_obj.matrix_world * self.new_obj.data.polygons[5].normal[1] != self.ray_obj.matrix_world * face.normal[1]:
+		rot(face,o,self.new_obj, self.ray_obj.matrix_world, Vector((0, 1, 0)))
+
+	bm.free
+	bpy.data.meshes.remove(mesh)
+
+	org = self.new_obj.data.vertices[3].co.copy()
+	self.new_obj.data.transform(Matrix.Translation(-org))
+	self.new_obj.location += org
 	bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
 	
 
-	# mw = obj.matrix_world.copy()
-	# center = obj.data.polygons[face].center
-	# axis_src = obj.data.polygons[face].normal
-	# axis_dst = Vector((0, 0, 1))
-	# matrix_rotate = mw.to_3x3()
-	# matrix_rotate = matrix_rotate * axis_src.rotation_difference(axis_dst).to_matrix()
-	# matrix_translation = Matrix.Translation(mw * center)
-	# self.new_obj.matrix_world = matrix_translation * matrix_rotate.to_4x4()
-	# self.new_obj.scale = Vector((0.1, 0.1, 0.1))
+def getView(context, event):
+	"""Get Viewport Vector""" 
+	region = context.region
+	rv3d = context.region_data
+	coord = event.mouse_region_x, event.mouse_region_y
+	#view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
+	print('popa',rv3d.view_rotation * Vector((0.0, 0.0, -1.0)))
+	print('popa')
+	return rv3d.view_rotation * Vector((0.0, 0.0, -1.0))
 
-# def Rotation(self, context, face, obj):
-#     mw = obj.matrix_world.copy()
-#     center = obj.data.polygons[face].center
-#     axis_src = obj.data.polygons[face].normal
-#     axis_dst = Vector((0, 0, 1))
-#     matrix_rotate = mw.to_3x3()
-#     matrix_rotate = matrix_rotate * axis_src.rotation_difference(axis_dst).to_matrix()
-#     matrix_translation = Matrix.Translation(mw * center)
-#     self.new_obj.matrix_world = matrix_translation * matrix_rotate.to_4x4()
-#     self.new_obj.scale = Vector((0.1, 0.1, 0.1))
+def PerspOrOrtot():
+	for area in bpy.context.screen.areas:
+		if area.type == 'VIEW_3D':
+			for space in area.spaces:
+				if space.type == 'VIEW_3D':
+					if space.region_3d.is_perspective:
+						return False
+					else:
+						return True
 
+def findView(self, context, event):
+	"""Get Viewport State
+	Use in def CreateBox()"""
 
-def CreateBox(context):
-	#create new obj
-	sv = context.scene.cursor_location
-	ab = context.active_object
+	if PerspOrOrtot():
+		view = getView(context, event)
+		if view == Vector((0.0, -1.0, 0.0)):
+			self.view = True
+			return True
+		elif view == Vector((0.0, 1.0, 0.0)):
+			self.view = True
+			return True
+		elif view == Vector((1.0, 0.0, 0.0)):
+			self.view = True
+			return True
+		elif view == Vector((-1.0, 0.0, 0.0)):
+			self.view = True
+			return True
+		elif view == Vector((0.0, 0.0, 1.0)):
+			self.view = True
+			return True
+		elif view == Vector((0.0, 0.0, -1.0)):
+			self.view = True
+			return True
+		else:
+			self.view = False
+			return False
+	else:
+		self.view = False
+		return False
+
+def CreateBox(self, context, event, mode):
+	"""create new obj"""
 	bpy.ops.mesh.primitive_cube_add()
 	new = context.active_object
-	new.scale = Vector((0.00001, 0.00001, 0.00001))
-	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-	org = new.data.vertices[2].co.copy()
-	new.data.transform(Matrix.Translation(-org))
-	new.location += org
-	#bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-	#context.scene.cursor_location = sv
-	bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
+
+	if findView(self, context, event):
+		new.scale = Vector((0.00001, 0.00001, 1.0))
+	else:
+		if mode:
+			new.scale = Vector((0.00001, 0.00001, 0.00001))
+			bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+			# org = new.data.vertices[3].co.copy()
+			# new.data.transform(Matrix.Translation(-org))
+			# new.location += org
+			# bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
+			
+
+			normal = new.data.polygons[4].normal.copy()
+
+			for i in new.data.polygons[4].vertices:
+				new.data.vertices[i].co += (normal *-1) * 0.0001
+
+		else:
+			new.scale = Vector((0.00001, 0.00001, 0.00001))
+			bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+
+			org = new.data.vertices[2].co.copy()
+			new.data.transform(Matrix.Translation(-org))
+			new.location += org
+			bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
+
+
+
 	return new
 
 def MoveVerts(self, context, event):
+	"""Moving the first vertives to create an area"""
 	v1 =self.new_obj.matrix_world.inverted() * context.scene.cursor_location
 
 	normal = self.new_obj.data.polygons[3].normal.copy()
 	normal2 = self.new_obj.data.polygons[0].normal.copy()
 
-	# v1 is the origin point and v2 is moved to v1 along the active face normal
-	#v1 = self.new_obj.matrix_world.inverted() * mainPoint
 	for i in self.new_obj.data.polygons[0].vertices:
 			v2 = self.new_obj.data.vertices[i].co.copy()
 			dvec = v1-v2
@@ -215,20 +292,10 @@ def MoveVerts(self, context, event):
 			dvec = v1-v2
 			dnormal = np.dot(dvec, normal)
 			self.new_obj.data.vertices[i].co += Vector(dnormal*normal)
-			
-# def faceMove(self, context, event):
-# 	v1 = self.new_obj.matrix_world.inverted() * context.scene.cursor_location
 
-# 	normal = self.new_obj.data.polygons[5].normal.copy()
-
-# 	for i in self.new_obj.data.polygons[5].vertices:
-# 			v2 = self.new_obj.data.vertices[i].co.copy()
-# 			dvec = v1-v2
-# 			dnormal = np.dot(dvec, normal)
-# 			self.new_obj.data.vertices[i].co += Vector(dnormal*normal)
-
-def faceMove(self, context, event, Hieght):
-	v1 = (Hieght - self.starMouse)
+def faceMove(self, context):
+	"""Sets the height of the boxing"""
+	v1 = self.new_obj.matrix_world.inverted() * context.scene.cursor_location
 
 	normal = self.new_obj.data.polygons[5].normal.copy()
 
@@ -237,156 +304,204 @@ def faceMove(self, context, event, Hieght):
 			dvec = v1-v2
 			dnormal = np.dot(dvec, normal)
 			self.new_obj.data.vertices[i].co += Vector(dnormal*normal)
-	
-
-def Zoom(self, context):
-	ar = None
-	for i in bpy.context.window.screen.areas:
-		if i.type == 'VIEW_3D': ar = i
-	ar = ar.spaces[0].region_3d.view_distance
-	return ar
-
-def StarPosMouse(self, context, event):
-	scene = context.scene
-	region = context.region
-	rv3d = context.region_data
-	coord = event.mouse_region_x, event.mouse_region_y
-	view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-	loc = view3d_utils.region_2d_to_location_3d(region, rv3d, coord, view_vector)
-
-	#normal = self.new_obj.matrix_local * self.new_obj.data.polygons[5].normal
-	#loc = ((normal * -1) * (self.new_obj.matrix_local * loc))
-	return loc
 
 def SetupBool(self, context):
-	bpy.context.scene.objects.active = self.obj
+	"""Setup Object For Boolean"""
+	for i in self.ray_obj.modifiers:
+		if i.show_viewport:
+			self.u_modifier.append(i)
+			i.show_viewport = False
+
+	bpy.context.scene.objects.active = self.ray_obj
 	bpy.ops.object.modifier_add(type='BOOLEAN')
-	for j, i in enumerate(self.obj.modifiers):
-		if i.type == 'BOOLEAN' and i.show_viewport:
-			i.operation = 'DIFFERENCE'
-			i.object = self.new_obj
-			i.solver = 'CARVE'
+	self.ray_obj.modifiers[-1].operation = 'DIFFERENCE'
+	self.ray_obj.modifiers[-1].object = self.new_obj
+	self.ray_obj.modifiers[-1].solver = 'CARVE'
+
+	self.show_wire = self.ray_obj.show_wire
+	self.show_all_edges = self.ray_obj.show_all_edges
+	self.auto_merge = bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge
 	bpy.context.scene.objects.active = self.new_obj
+	bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge = False
+	self.ray_obj.show_wire = True
+	self.ray_obj.show_all_edges = True
+
 	self.new_obj.draw_type = 'WIRE'
-	return j
+
+def ApplyBool(self, context):
+	bpy.context.scene.objects.active = self.ray_obj
+	bpy.ops.object.modifier_apply(modifier=self.ray_obj.modifiers[-1].name)
+
+	for i in self.ray_obj.modifiers:
+		if i in self.u_modifier:
+			i.show_viewport = True
+
+	self.ray_obj.show_wire = self.show_wire
+	self.ray_obj.show_all_edges = self.show_all_edges
+	bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge = self.auto_merge
+
+	bpy.context.scene.objects.unlink(self.new_obj)
+	bpy.data.objects.remove(self.new_obj)
+
+	if self.edit_mode_obj:
+		bpy.context.scene.objects.active = self.edit_mode_obj
+		bpy.ops.object.mode_set(mode='EDIT')
+
+
+def FlipNormal():
+	bpy.ops.object.mode_set(mode='EDIT')
+	bpy.ops.mesh.select_all(action='SELECT')
+	bpy.ops.mesh.normals_make_consistent(inside=False)
+	bpy.ops.object.mode_set(mode='OBJECT')
 
 
 
-class QuickBox(bpy.types.Operator):
-	bl_idname = "mesh.q_p"
-	bl_label = "q_p"
+class QBox(bpy.types.Operator):
+	bl_idname = "objects.stream_box"
+	bl_label = "Stream Box"
 	bl_options = {"REGISTER", "UNDO", "GRAB_CURSOR", "BLOCKING"}
-	right = 0
-	obj = None
-	face = None
-	leftCount = 0
-	normal = None
-	new_obj = None
-	starMouse = None
-	t= True
-	n = False
+
+			# Main Variable
+######################################
+	leftMS = 0 # Left Mouse State
+	rightMS = 0 # Right Mouse State
+	new_obj = None # New object
+	ray_faca = None # Face for rotation
+	ray_obj = None # sours object
+	mode = False # Create object for new geometry of boolean "if True then boolean"
+	view = None # vector viev
+	
+######################################
+			#user setings
+	show_wire = None
+	show_all_edges = None
+	u_modifier = [] # Save state, need for boolean mode
+	auto_merge = None
+	edit_mode_obj = None
+######################################
+
 	@classmethod
 	def poll(cls, context):
 		return (context.mode == "EDIT_MESH") or (context.mode == "OBJECT")
 
 	def modal(self, context, event):
-		if event.type == 'Q':
-			if self.right == 0 and self.face and self.leftCount == 0:
-				if self.new_obj is None:
-					self.new_obj = CreateBox(context)
-					Rotation(self, context, self.face, self.obj)
-					self.leftCount += 1
-					self.right += 1
+		context.area.header_text_set("Left Mouse Bootom: Create New Premetive, Right Mouse Bootom: Boolean, Press CTRL For Snap")
+		if event.type == 'LEFTMOUSE':
+			if self.leftMS == 0 and not self.ray_faca is None:
+				self.new_obj = CreateBox(self, context, event, self.mode)
+				Rotation(self, context, self.ray_faca, self.ray_obj)
+
+			elif self.leftMS == 0 and self.ray_faca is None:
+				self.new_obj = CreateBox(self, context, event, self.mode)
+
+			elif self.leftMS == 2:
+				FlipNormal()
+				if self.mode:
+					ApplyBool(self, context)
+				elif self.edit_mode_obj:
+						bpy.context.scene.objects.active = self.edit_mode_obj
+						self.edit_mode_obj.select = True
+						bpy.ops.object.join()
+						bpy.ops.object.mode_set(mode='EDIT')
+				context.area.header_text_set()
+				return {'FINISHED'}
+
+			self.leftMS  += 1
+			self.rightMS += 1
+			if self.leftMS == 2:
+				bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+				FlipNormal()
+				if self.view:
+					if self.mode:
+						ApplyBool(self, context)
+					elif self.edit_mode_obj:
+						bpy.context.scene.objects.active = self.edit_mode_obj
+						self.edit_mode_obj.select = True
+						bpy.ops.object.join()
+						bpy.ops.object.mode_set(mode='EDIT')
+					context.area.header_text_set()
+					return {'FINISHED'}
+
+
+
+		if event.type == 'RIGHTMOUSE' and not self.ray_faca is None:
+			print('zah')
+			self.mode = True
+			if self.rightMS == 0 and not self.ray_faca is None:
+				self.new_obj = CreateBox(self, context, event, self.mode)
+				Rotation(self, context, self.ray_faca, self.ray_obj)
 				SetupBool(self, context)
 
-			
+			elif self.rightMS == 0 and self.ray_faca is None:
+				self.new_obj = CreateBox(self, context, event, self.mode)
 
-			return {'RUNNING_MODAL'}
+			elif self.rightMS == 2:
+				FlipNormal()
+				ApplyBool(self, context)
+				context.area.header_text_set()
+				return {'FINISHED'}
+
+			self.leftMS  += 1
+			self.rightMS += 1
+			if self.rightMS == 2:
+				FlipNormal()
+				if self.view:
+					ApplyBool(self, context)
+					context.area.header_text_set()
+					return {'FINISHED'}
+
 
 		if event.type == 'MOUSEMOVE':
-			if self.leftCount == 0:
-				self.face, self.obj = RayCast(self, context, event, ray_max=1000.0)
-				if isinstance(self.face,type(None)):
+			if self.rightMS > 0:
+				FlipNormal()
+			if self.leftMS == 0 and self.rightMS == 0:
+				if event.ctrl:
+					self.ray_faca, self.ray_obj = RayCast(self, context, event, ray_max=1000.0, snap=True)
+				else:
+					self.ray_faca, self.ray_obj = RayCast(self, context, event, ray_max=1000.0,snap=False)
+				print(self.ray_faca)
+				print(self.ray_obj)
+				if isinstance(self.ray_faca,type(None)):
 					get_pos3d(context, event)
-					
-			elif self.leftCount == 1:
-				if not isinstance(self.face,type(None)):
-					print('nu')
-					global_loc = self.obj.matrix_world * self.obj.data.polygons[self.face].center
-					global_norm = self.obj.matrix_world * (self.obj.data.polygons[self.face].center + self.obj.data.polygons[self.face].normal) - global_loc
-					point = self.obj.data.vertices[self.obj.data.polygons[self.face].vertices[0]].co.copy()
+					self.ray_obj = None
+					self.ray_faca = None
+
+			elif self.leftMS == 1 or self.rightMS == 1:
+				if event.ctrl:
+				   RayCast(self, context, event, ray_max=1000.0, snap=True)
+				   MoveVerts(self, context, event)
+				   return {'RUNNING_MODAL'}
+
+				if not isinstance(self.ray_faca,type(None)):
+					global_loc = self.ray_obj.matrix_world * self.ray_obj.data.polygons[self.ray_faca].center
+					global_norm = self.ray_obj.matrix_world * (self.ray_obj.data.polygons[self.ray_faca].center + self.ray_obj.data.polygons[self.ray_faca].normal) - global_loc
+					point = self.ray_obj.data.vertices[self.ray_obj.data.polygons[self.ray_faca].vertices[0]].co.copy()
 					get_pos3d(context, event, global_loc, global_norm)
 				else:
 					get_pos3d(context, event)
-					#SetCursor(context, event)
+
 				MoveVerts(self, context, event)
-			elif self.leftCount == 2:
-				faceMove(self, context, event, StarPosMouse(self, context, event))
 
-		if self.right != 0:
-			bpy.ops.object.mode_set(mode='EDIT')
-			bpy.ops.mesh.select_all(action='SELECT')
-			bpy.ops.mesh.normals_make_consistent(inside=False)
-			bpy.ops.object.mode_set(mode='OBJECT')
-				
-
-
-
-			#if self.n and not self.t:
-				#setCoord(self, context, MCoord(self, context,event))
-
-		if event.type == 'RIFGTMOUSE':
-			if self.right == 0 and self.face and self.leftCount == 0:
-				self.new_obj = CreateBox(context)
-				Rotation(self, context, self.face, self.obj)
-				SetupBool(self, context)
-
-			
-				self.leftCount += 1
-				self.right += 1
-
-			return {'RUNNING_MODAL'}
-		
-		if event.type == 'LEFTMOUSE':
-			if self.leftCount == 0 and self.face:
-				self.new_obj = CreateBox(context)
-				Rotation(self, context, self.face, self.obj)
-			elif self.leftCount == 0 and not self.face:
-				self.new_obj = CreateBox(context)
-			elif self.leftCount == 2:
-				bpy.ops.object.mode_set(mode='EDIT')
-				bpy.ops.mesh.select_all(action='SELECT')
-				bpy.ops.mesh.normals_make_consistent(inside=False)
-				bpy.ops.object.mode_set(mode='OBJECT')
-				if self.right != 0:
-					bpy.context.scene.objects.active = self.obj
-					bpy.ops.object.modifier_apply(modifier=self.obj.modifiers[0].name)
-					bpy.context.scene.objects.unlink(self.new_obj)
-        			bpy.data.objects.remove(self.new_obj)
-
-
-
-				return {'FINISHED'}
-
-			self.leftCount += 1
-			
-			if self.leftCount == 2:
-				self.starMouse = StarPosMouse(self, context, event)
-				bpy.ops.object.mode_set(mode='EDIT')
-				bpy.ops.mesh.select_all(action='SELECT')
-				bpy.ops.mesh.normals_make_consistent(inside=False)
-				bpy.ops.object.mode_set(mode='OBJECT')
-			return {'RUNNING_MODAL'}
-
-
-
+			elif self.leftMS == 2 or self.rightMS == 2:
+				if event.ctrl:
+					RayCast(self, context, event, ray_max=1000.0, snap=True)
+					faceMove(self, context,)
+					return {'RUNNING_MODAL'}
+				get_pos3d(context, event, self.new_obj.location , getView(context, event), True)
+				faceMove(self, context,)
 
 
 		return {'RUNNING_MODAL'}
 
+
+
 	def invoke(self, context, event):
 		if context.space_data.type == 'VIEW_3D':
-			self.act_obj = context.active_object
+			if context.mode == "EDIT_MESH":
+				self.edit_mode_obj = context.active_object
+				bpy.ops.mesh.select_all(action='DESELECT')
+				bpy.ops.object.mode_set(mode='OBJECT')
+			
 			context.window_manager.modal_handler_add(self)
 			return {'RUNNING_MODAL'}
 		else:
@@ -394,13 +509,12 @@ class QuickBox(bpy.types.Operator):
 			return {'CANCELLED'}
 
 
-
 def register():
-	bpy.utils.register_class(QuickBox)
+	bpy.utils.register_class(QBox)
 
 
 def unregister():
-	bpy.utils.unregister_class(QuickBox)
+	bpy.utils.unregister_class(QBox)
 
 
 if __name__ == "__main__":
