@@ -1,48 +1,32 @@
 import bpy
 import bmesh
-from mathutils import Vector, kdtree, Matrix
+from mathutils import Vector, Matrix
 from bpy_extras import view3d_utils
 import numpy as np
 from mathutils.geometry import intersect_line_plane
-from math import sqrt
 
-def Rotation(self, context, face, obj):
-	bpy.context.scene.objects.active = obj
-	bpy.ops.object.mode_set(mode='EDIT')
-	bpy.ops.mesh.select_all(action='DESELECT')
-	bm = bmesh.from_edit_mesh(obj.data)
-	bm.faces.ensure_lookup_table()
-	bm.faces[face].select = True
-	bpy.ops.transform.create_orientation(name = 'sosok', use = False, overwrite = True)
-	bpy.ops.object.mode_set(mode='OBJECT')
-	bpy.context.scene.objects.active = self.new_obj
-	self.new_obj.matrix_world  = context.scene.orientations['sosok'].matrix.to_4x4().copy()
-	bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
-
-def get_pos3d(context, event, point=False, normal=False): 
+def get_pos3d(context, event, point=False, normal=False, revers=False): 
 	""" 
 	convert mouse pos to 3d point over plane defined by origin and normal 
 	""" 
+	# get the context arguments
 	region = bpy.context.region 
 	rv3d = bpy.context.region_data 
 	coord = event.mouse_region_x, event.mouse_region_y
-	#rM = context.active_object.matrix_world.to_3x3() 
 	view_vector_mouse = view3d_utils.region_2d_to_vector_3d(region, rv3d,coord)
 	ray_origin_mouse = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
-	if not point and not normal:
-		pt = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, Vector((0.0, 0.0, 0.0)), Vector((0.0, 0.0, 1.0)), False)
-	else:
-		pt = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, point, normal, False)
-	if not pt is None:
-		bpy.context.scene.cursor_location = pt
 
-def SetCursor(context, event):
-	scene = context.scene
-	region = context.region
-	rv3d = context.region_data
-	coord = event.mouse_region_x, event.mouse_region_y
-	view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-	scene.cursor_location = view3d_utils.region_2d_to_location_3d(region, rv3d, coord, view_vector)
+	# get coord by plane
+	if not point and not normal:
+		pointLoc = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, Vector((0.0, 0.0, 0.0)), Vector((0.0, 0.0, 1.0)), False)
+	else:
+		if not revers:
+			pointLoc = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, point, normal, False)
+		else:
+			pointLoc = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, point, normal, True)
+
+	if not pointLoc is None:
+		context.scene.cursor_location = pointLoc
 
 def RayCast(self, context, event, ray_max=1000.0, snap=False):
 	"""Run this function on left mouse, execute the ray cast"""
@@ -61,7 +45,7 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 	def visible_objects_and_duplis():
 		"""Loop over (object, matrix) pairs (mesh only)"""
 
-		for obj in context.visible_objects:
+		for obj in  reversed(context.visible_objects):
 			if obj.type == 'MESH':
 				yield (obj, obj.matrix_world.copy())
 
@@ -74,6 +58,7 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 
 			obj.dupli_list_clear()
 
+
 	def obj_ray_cast(obj, matrix):
 		"""Wrapper for ray casting that moves the ray into object space"""
 
@@ -84,10 +69,10 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 		ray_direction_obj = ray_target_obj - ray_origin_obj
 		d = ray_direction_obj.length
 
-		ray_direction_obj.normalize()
+		ray_direction_obj.normalized()
 
 		success, location, normal, face_index = obj.ray_cast(ray_origin_obj, ray_direction_obj)
-
+		print("Face", face_index)
 		if face_index != -1:
 			return location, normal, face_index
 		else:
@@ -107,7 +92,7 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 			if hit is not None:
 				hit_world = matrix * hit
 				scene.cursor_location = hit_world
-				length_squared = (hit_world - ray_origin).length_squared
+				length_squared = (hit_world - ray_origin).length
 				if best_obj is None or length_squared < best_length_squared:
 					best_length_squared = length_squared
 					best_obj = obj
@@ -115,15 +100,17 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 					best_face = face_index
 					best_hit = hit
 					break
+	if not snap:
+		return best_face, best_obj
 
 	def run(best_obj, best_matrix, best_face, best_hit):
 		best_distance = float("inf")  # use float("inf") (infinity) to have unlimited search range
-
+		print("Face", face_index)
 		mesh = best_obj.data
-		best_matrix = best_obj.matrix_world
+		#best_matrix = best_obj.matrix_world
 		for vert_index in mesh.polygons[best_face].vertices:
 			vert_coord = mesh.vertices[vert_index].co
-			distance = (vert_coord - best_hit).magnitude
+			distance = (vert_coord - best_hit).length
 			if distance < best_distance:
 				best_distance = distance
 				scene.cursor_location = best_matrix * vert_coord
@@ -132,96 +119,108 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 			p0 = mesh.vertices[v0].co
 			p1 = mesh.vertices[v1].co
 			p = (p0 + p1) / 2
-			distance = (p - best_hit).magnitude
+			distance = (p - best_hit).length
 			if distance < best_distance:
 				best_distance = distance
 				scene.cursor_location = best_matrix * p
 
 		face_pos = Vector(mesh.polygons[best_face].center)
-		distance = (face_pos - best_hit).magnitude
+		distance = (face_pos - best_hit).length
 		if distance < best_distance:
 			best_distance = distance
 			scene.cursor_location = best_matrix * face_pos
 
-	if snap:
-		run(best_obj, best_matrix, best_face, best_hit)
 
-	return best_face, best_obj
+	if not best_face is None and not best_obj is None:
+		run(best_obj, best_matrix, best_face, best_hit)
+		return best_face, best_obj
+	else:
+		return None, None
+
+def Rotation(self, context, face, obj):
+	"""Rotation new object by source face"""
+	mesh = self.ray_obj.to_mesh(context.scene, apply_modifiers=True, settings='PREVIEW')
+	mw = self.ray_obj.matrix_world.copy()
+	bm = bmesh.new()
+	bm.from_mesh(mesh)
+	bm.faces.ensure_lookup_table()
+	face = bm.faces[self.ray_faca]
+	o = face.calc_center_median()
+	self.global_loc =  self.ray_obj.matrix_world * face.calc_center_median().copy()
+	self.global_norm = self.ray_obj.matrix_world * (self.global_loc + face.normal.copy()) - self.global_loc
+
+	def rot(face,o,obj, mw, axis_dst2):
+	
+		axis_src = face.normal
+		axis_src2 = face.calc_tangent_edge()
+		axis_dst = Vector((0, 0, 1))
+		
+		vec2 = axis_src * mw.inverted()
+		matrix_rotate = axis_dst.rotation_difference(vec2).to_matrix().to_4x4()
+		
+		vec1 = axis_src2 * mw.inverted()
+		axis_dst2 = axis_dst2 * matrix_rotate.inverted()
+		mat_tmp = axis_dst2.rotation_difference(vec1).to_matrix().to_4x4()
+		matrix_rotate = mat_tmp*matrix_rotate
+		matrix_translation = Matrix.Translation(mw * o)
+		
+		self.new_obj.matrix_world = matrix_translation * matrix_rotate.to_4x4()
+
+	rot(face,o,self.new_obj, self.ray_obj.matrix_world, Vector((1, 0, 0)))
+
+	if self.ray_obj.matrix_world * self.new_obj.data.polygons[0].normal[1] != self.ray_obj.matrix_world * face.normal[1]:
+		rot(face,o,self.new_obj, self.ray_obj.matrix_world, Vector((0, 1, 0)))
+
+
+
+	bm.free
+	bpy.data.meshes.remove(mesh)
+
+	org = self.new_obj.data.vertices[3].co.copy()
+	self.new_obj.data.transform(Matrix.Translation(-org))
+	self.new_obj.location += org
+	bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
+
+	self.matrix = self.new_obj.matrix_world.copy()
 
 def CreateCilinder(context):
-	sv = context.scene.cursor_location
-	ab = context.active_object
 	bpy.ops.mesh.primitive_circle_add(vertices=32, fill_type='NGON')
 	new = context.active_object
 	new.scale = Vector((0.00001, 0.00001, 0.00001))
 	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 	return new, context.scene.cursor_location.copy()
 
-def Scale(self, context):
-	mainPoint = self.new_obj.data.polygons[0].center.copy()
-	loc = self.new_obj.matrix_world.inverted() * context.scene.cursor_location
-
-	locx = loc[0] - mainPoint[0]
-	locy = loc[1] - mainPoint[1]
-	locz = loc[2] - mainPoint[2]
-	# получаем радиус, между мышкой и центром
-	distance = sqrt((locx)**2 + (locy)**2 + (locz)**2)
- 
-	bpy.data.objects.remove(self.new_obj)
-	SC = context.scene.cursor_location.copy()
-	context.scene.cursor_location = self.savePos.copy()
-	bpy.ops.mesh.primitive_circle_add(vertices=self.segment,radius=distance, fill_type='NGON')
-	self.new_obj = context.active_object
-	if self.face is not None:
-		Rotation(self, context, self.face, self.obj)
-	context.scene.cursor_location = SC
-	print(distance)
+def FlipNormal():
+	bpy.ops.object.mode_set(mode='EDIT')
+	bpy.ops.mesh.select_all(action='SELECT')
 	
-	#bpy.ops.transform.resize(value= loc * distance)
-	#bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+	bpy.ops.mesh.normals_make_consistent(inside=False)
+	bpy.ops.object.mode_set(mode='OBJECT')
 
-def Sub(self, context, mode):
-	if mode:
-		self.segment += 1
-	else:
-		self.segment -= 1
-		if self.segment == 2:
-			self.segment += 1
-
-	mainPoint = self.new_obj.data.polygons[0].center.copy()
-	loc = self.new_obj.matrix_world.inverted() * context.scene.cursor_location
-
-	locx = loc[0] - mainPoint[0]
-	locy = loc[1] - mainPoint[1]
-	locz = loc[2] - mainPoint[2]
-	# получаем радиус, между мышкой и центром
-	distance = sqrt((locx)**2 + (locy)**2 + (locz)**2)
-
+def Scale(self, context):
+	if self.leftMS < 2:
+		mainPoint = self.new_obj.data.polygons[0].center.copy()
+		loc = self.new_obj.matrix_world.inverted() * context.scene.cursor_location
+		self.dist = (mainPoint-loc).length
+	bpy.context.scene.objects.unlink(self.new_obj)
 	bpy.data.objects.remove(self.new_obj)
-	SC = context.scene.cursor_location.copy()
-	context.scene.cursor_location = self.savePos.copy()
-	bpy.ops.mesh.primitive_circle_add(vertices=self.segment,radius=distance, fill_type='NGON')
+	sv = context.scene.cursor_location.copy()
+	context.scene.cursor_location = self.savePos
+	bpy.ops.mesh.primitive_circle_add(vertices=self.segment,radius=self.dist, fill_type='NGON')
+	context.scene.cursor_location = sv
 	self.new_obj = context.active_object
-	if self.face is not None:
-		Rotation(self, context, self.face, self.obj)
+	if self.matrix is not None:
+		self.new_obj.matrix_world = self.matrix
+	if self.mode:
+		norm = self.new_obj.data.polygons[0].normal.copy()
+		for i in self.new_obj.data.vertices:
+			i.co += norm * 0.0001
+		#FlipNormal()
+		self.new_obj.draw_type = 'WIRE'
+		self.ray_obj.modifiers[-1].object = self.new_obj
 
-	context.scene.cursor_location = SC
-	print(distance)
-	self.new_obj = context.active_object
-	#bpy.ops.transform.resize(value= loc * distance)
-	#bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
-def StarPosMouse(self, context, event):
-	scene = context.scene
-	region = context.region
-	rv3d = context.region_data
-	coord = event.mouse_region_x, event.mouse_region_y
-	view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-	loc = view3d_utils.region_2d_to_location_3d(region, rv3d, coord, view_vector)
 
-	#normal = self.new_obj.matrix_local * self.new_obj.data.polygons[5].normal
-	#loc = ((normal * -1) * (self.new_obj.matrix_local * loc))
-	return loc
 
 def SetSolidify(self, context):
 	self.new_obj.modifiers.new('Solidify', 'SOLIDIFY')
@@ -229,131 +228,308 @@ def SetSolidify(self, context):
 	self.new_obj.modifiers[0].use_quality_normals = True
 	self.new_obj.modifiers[0].thickness = 0.1
 
-def StarPosMouse(self, context, event):
-		scene = context.scene
-		region = context.region
-		rv3d = context.region_data
-		coord = event.mouse_region_x, event.mouse_region_y
-		view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-		loc = view3d_utils.region_2d_to_location_3d(region, rv3d, coord, view_vector)
+def Extrude(self, context):
+	v1 = self.new_obj.matrix_world.inverted() * context.scene.cursor_location
+	normal = self.new_obj.data.polygons[0].normal.copy()
+	centr = self.new_obj.data.polygons[0].center.copy()
+	dvec = v1-centr
+	dnormal = np.dot(dvec, normal)
+	v2 = centr + Vector(dnormal*normal)
+	dist = (centr - v2).length
+	if not self.mode:
+	   self.new_obj.modifiers[0].thickness = dist * -1
+	else:
+		self.new_obj.modifiers[0].thickness = dist
+		
+	
+def getView(context, event):
+	"""Get Viewport Vector""" 
+	region = context.region
+	rv3d = context.region_data
+	coord = event.mouse_region_x, event.mouse_region_y
+	#view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
+	print('popa',rv3d.view_rotation * Vector((0.0, 0.0, -1.0)))
+	print('popa')
+	return rv3d.view_rotation * Vector((0.0, 0.0, -1.0))
 
-		global_loc = self.new_obj.matrix_world * self.new_obj.data.polygons[0].center.copy()
-		normal = self.new_obj.matrix_world * (self.new_obj.data.polygons[0].center.copy() + self.new_obj.data.polygons[0].normal.copy()) - global_loc
-					
-		#normal = self.new_obj.matrix_world * self.new_obj.data.polygons[0].normal
-		loc = ((normal *-1) * (self.new_obj.matrix_world * loc))
-		return loc
+def PerspOrOrtot():
+	for area in bpy.context.screen.areas:
+		if area.type == 'VIEW_3D':
+			for space in area.spaces:
+				if space.type == 'VIEW_3D':
+					if space.region_3d.is_perspective:
+						return False
+					else:
+						return True
 
-def Zoom(self, context):
-	ar = None
-	for i in bpy.context.window.screen.areas:
-		if i.type == 'VIEW_3D': ar = i
-	ar = ar.spaces[0].region_3d.view_distance
-	return ar
+def findView(self, context, event):
+	"""Get Viewport State
+	Use in def CreateBox()"""
 
-class QuickCir(bpy.types.Operator):
-	bl_idname = "mesh.q_p"
-	bl_label = "q_p"
+	if PerspOrOrtot():
+		view = getView(context, event)
+		if view == Vector((0.0, -1.0, 0.0)):
+			self.view = True
+			return True
+		elif view == Vector((0.0, 1.0, 0.0)):
+			self.view = True
+			return True
+		elif view == Vector((1.0, 0.0, 0.0)):
+			self.view = True
+			return True
+		elif view == Vector((-1.0, 0.0, 0.0)):
+			self.view = True
+			return True
+		elif view == Vector((0.0, 0.0, 1.0)):
+			self.view = True
+			return True
+		elif view == Vector((0.0, 0.0, -1.0)):
+			self.view = True
+			return True
+		else:
+			self.view = False
+			return False
+	else:
+		self.view = False
+		return False
+
+def SetupBool(self, context):
+	"""Setup Object For Boolean"""
+	self.new_obj.draw_type = 'WIRE'
+	for i in self.ray_obj.modifiers:
+		if i.show_viewport:
+			self.u_modifier.append(i)
+			i.show_viewport = False
+
+	bpy.context.scene.objects.active = self.ray_obj
+	bpy.ops.object.modifier_add(type='BOOLEAN')
+	self.ray_obj.modifiers[-1].operation = 'DIFFERENCE'
+	self.ray_obj.modifiers[-1].object = self.new_obj
+	self.ray_obj.modifiers[-1].solver = 'CARVE'
+
+	self.show_wire = self.ray_obj.show_wire
+	self.show_all_edges = self.ray_obj.show_all_edges
+	bpy.context.scene.objects.active = self.new_obj
+	self.auto_merge = bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge
+	bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge = False
+	self.ray_obj.show_wire = True
+	self.ray_obj.show_all_edges = True
+	
+
+def ApplyBool(self, context):
+	bpy.context.scene.objects.active = self.ray_obj
+	bpy.ops.object.modifier_apply(modifier=self.ray_obj.modifiers[-1].name)
+
+	for i in self.ray_obj.modifiers:
+		if i in self.u_modifier:
+			i.show_viewport = True
+
+	self.ray_obj.show_wire = self.show_wire
+	self.ray_obj.show_all_edges = self.show_all_edges
+	bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge = self.auto_merge
+
+	bpy.context.scene.objects.unlink(self.new_obj)
+	bpy.data.objects.remove(self.new_obj)
+
+	if self.edit_mode_obj:
+		bpy.context.scene.objects.active = self.edit_mode_obj
+		bpy.ops.object.mode_set(mode='EDIT')
+
+class SCircle(bpy.types.Operator):
+	bl_idname = "objects.stream_circle"
+	bl_label = "Stream Circle"
 	bl_options = {"REGISTER", "UNDO", "GRAB_CURSOR", "BLOCKING"}
-	right = 0
-	segment = 16
+
+			# Main Variable
+######################################
+	leftMS = 0 # Left Mouse State
+	rightMS = 0 # Right Mouse State
+	new_obj = None # New object
+	ray_faca = None # Face for rotation
+	ray_obj = None # sours object
+	mode = False # Create object for new geometry of boolean "if True then boolean"
+	view = None # vector viev
 	savePos = None
-	obj = None
-	face = None
-	leftCount = 0
-	normal = None
-	new_obj = None
-	scale = True
-	starMouse = None
-	t= True
-	n = False
+	segment = 32
+	matrix = None
+	global_loc = None
+	global_norm = None
+	dist = None
+	
+######################################
+			#user setings
+	show_wire = None
+	show_all_edges = None
+	u_modifier = [] # Save state, need for boolean mode
+	auto_merge = None
+	edit_mode_obj = None
+######################################
+
 	@classmethod
 	def poll(cls, context):
 		return (context.mode == "EDIT_MESH") or (context.mode == "OBJECT")
-	
+
 	def modal(self, context, event):
-
-
-		if event.type == 'Q':
-			return {'FINISHED'}
-
+		context.area.header_text_set("Left Mouse Bootom: Create New Premetive, Right Mouse Bootom: Boolean, Press CTRL For Snap, WHEEL UP MOUSE: add sigment, WHEEL DOWN MOUSE: remove sigment")
+		
 		if event.type == 'WHEELUPMOUSE':
-			if self.leftCount != 2:
-				Sub(self, context, mode=True)
+			if self.leftMS != 2:
+				self.segment += 1
+				Scale(self, context)
 			else:
+				self.segment += 1
 				dist = self.new_obj.modifiers[0].thickness
-				Sub(self, context, mode=True)
+				Scale(self, context)
 				SetSolidify(self, context)
 				self.new_obj.modifiers[0].thickness = dist
 
 		if event.type == 'WHEELDOWNMOUSE':
-			if self.leftCount != 2:
-				Sub(self, context, mode=False)
-			else: 
+			if self.leftMS != 2:
+				self.segment -= 1
+				if self.segment < 3:
+					self.segment += 1
+				Scale(self, context)
+			else:
+				self.segment -= 1
+				if self.segment < 3:
+					self.segment += 1
 				dist = self.new_obj.modifiers[0].thickness
-				Sub(self, context, mode=False)
+				Scale(self, context)
 				SetSolidify(self, context)
 				self.new_obj.modifiers[0].thickness = dist
+		
+		if event.type == 'LEFTMOUSE':
+			if self.leftMS == 0 and not self.ray_faca is None:
+				self.new_obj, self.savePos = CreateCilinder(context)
+				Rotation(self, context, self.ray_faca, self.ray_obj)
+
+			elif self.leftMS == 0 and self.ray_faca is None:
+				self.new_obj, self.savePos = CreateCilinder(context)
+
+			elif self.leftMS == 2:
+				#FlipNormal()
+				if self.mode:
+					bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
+					ApplyBool(self, context)
+				elif self.edit_mode_obj:
+					bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
+					bpy.context.scene.objects.active = self.edit_mode_obj
+					self.edit_mode_obj.select = True
+					bpy.ops.object.join()
+					bpy.ops.object.mode_set(mode='EDIT')
+				context.area.header_text_set()
+				return {'FINISHED'}
+
+			self.leftMS  += 1
+			self.rightMS += 1
+			if self.leftMS == 2:
+				bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+				SetSolidify(self, context)
+				if self.view:
+					SetSolidify(self, context)
+					self.new_obj.modifiers[0].thickness = 1
+					if self.mode:
+						bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
+						ApplyBool(self, context)
+					elif self.edit_mode_obj:
+						bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
+						bpy.context.scene.objects.active = self.edit_mode_obj
+						self.edit_mode_obj.select = True
+						bpy.ops.object.join()
+						bpy.ops.object.mode_set(mode='EDIT')
+					context.area.header_text_set()
+					return {'FINISHED'}
+
+
+
+		if event.type == 'RIGHTMOUSE' and not self.ray_faca is None:
+			self.mode = True
+			if self.rightMS == 0 and not self.ray_faca is None:
+				self.new_obj, self.savePos = CreateCilinder(context)
+				Rotation(self, context, self.ray_faca, self.ray_obj)
+				SetupBool(self, context)
+
+			elif self.rightMS == 0 and self.ray_faca is None:
+				self.new_obj, self.savePos = CreateCilinder(context)
+
+			elif self.rightMS == 2:
+				ApplyBool(self, context)
+				context.area.header_text_set()
+				return {'FINISHED'}
+
+			self.leftMS  += 1
+			self.rightMS += 1
+			if self.rightMS == 2:
+				SetSolidify(self, context)
+				#FlipNormal()
+				if self.view:
+					SetSolidify(self, context)
+					self.new_obj.modifiers[0].thickness = 1
+					ApplyBool(self, context)
+					context.area.header_text_set()
+					return {'FINISHED'}
 
 
 		if event.type == 'MOUSEMOVE':
-			if self.leftCount == 0:
-				self.face, self.obj = RayCast(self, context, event, ray_max=1000.0)
-				if isinstance(self.face,type(None)):
+			#if self.rightMS > 0:
+				#FlipNormal()
+			if self.leftMS == 0 and self.rightMS == 0:
+				if event.ctrl:
+					self.ray_faca, self.ray_obj = RayCast(self, context, event, ray_max=1000.0, snap=True)
+				else:
+					self.ray_faca, self.ray_obj = RayCast(self, context, event, ray_max=1000.0,snap=False)
+				if isinstance(self.ray_faca,type(None)):
 					get_pos3d(context, event)
-		elif self.leftCount == 1:
-			#if not isinstance(self.face,type(None)):
-			#if self.scale:
-				#self.scale = False
-			get_pos3d(context, event)
-			Scale(self, context)
-		elif self.leftCount == 2:
-			dis = (StarPosMouse(self, context, event) - self.starMouse) / Zoom(self, context)
-			self.new_obj.modifiers[0].thickness = dis * 2
+					self.ray_obj = None
+					self.ray_faca = None
 
-		if event.type == 'LEFTMOUSE':
-			if self.leftCount == 0 and self.face:
-				self.new_obj, self.savePos = CreateCilinder(context)
-				Rotation(self, context, self.face, self.obj)
-			elif self.leftCount == 0 and not self.face:
-				self.new_obj, self.savePos = CreateCilinder(context)
-			elif self.leftCount == 2:
-				bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
-				bpy.ops.object.mode_set(mode='EDIT')
-				bpy.ops.mesh.select_all(action='SELECT')
-				bpy.ops.mesh.normals_make_consistent(inside=False)
-				bpy.ops.object.mode_set(mode='OBJECT')
-				if self.right != 0:
-					bpy.context.scene.objects.active = self.obj
-					bpy.ops.object.modifier_apply(modifier=self.obj.modifiers[0].name)
-					bpy.context.scene.objects.unlink(self.new_obj)
-					bpy.data.objects.remove(self.new_obj)
+			elif self.leftMS == 1 or self.rightMS == 1:
+				if event.ctrl:
+					RayCast(self, context, event, ray_max=1000.0, snap=True)
+					Scale(self, context)
+					return {'RUNNING_MODAL'}
 
+				if not isinstance(self.ray_faca,type(None)):
+					get_pos3d(context, event, self.global_loc, self.global_norm)
+				else:
+					get_pos3d(context, event)
 
+				Scale(self, context)
 
-				return {'FINISHED'}
+			elif self.leftMS == 2 or self.rightMS == 2:
+				if event.ctrl:
+					RayCast(self, context, event, ray_max=1000.0, snap=True)
+					Extrude(self, context)
+					return {'RUNNING_MODAL'}
+				get_pos3d(context, event, self.new_obj.location , getView(context, event), True)
+				Extrude(self, context)
 
-			self.leftCount += 1
-			if self.leftCount == 2:
-				SetSolidify(self, context)
-				self.starMouse = StarPosMouse(self, context, event)
 
 		return {'RUNNING_MODAL'}
 
+
+
 	def invoke(self, context, event):
 		if context.space_data.type == 'VIEW_3D':
+			if context.mode == "EDIT_MESH":
+				self.edit_mode_obj = context.active_object
+				bpy.ops.mesh.select_all(action='DESELECT')
+				bpy.ops.object.mode_set(mode='OBJECT')
+				findView(self, context, event)
+			
 			context.window_manager.modal_handler_add(self)
 			return {'RUNNING_MODAL'}
 		else:
 			self.report({'WARNING'}, "is't 3dview")
 			return {'CANCELLED'}
 
+
 def register():
-	bpy.utils.register_class(QuickCir)
+	bpy.utils.register_class(SCircle)
 
 
 def unregister():
-	bpy.utils.unregister_class(QuickCir)
+	bpy.utils.unregister_class(SCircle)
 
 
 if __name__ == "__main__":
