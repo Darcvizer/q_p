@@ -5,17 +5,6 @@ from bpy_extras import view3d_utils
 import numpy as np
 from mathutils.geometry import intersect_line_plane
 
-bl_info = {
-	"name": "q_p :)",
-	"location": "View3D > Add > Object > q_p,",
-	"description": "Interactive creation of primitives.",
-	"author": "Vladislav Kindushov, 1 more cool uncle, but I did not ask his nickname ",
-	"version": (0, 0, 1),
-	"blender": (2, 7, 9),
-	"category": "Object",
-}
-
-
 def get_pos3d(context, event, point=False, normal=False, revers=False): 
 	""" 
 	convert mouse pos to 3d point over plane defined by origin and normal 
@@ -117,7 +106,7 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 	def run(best_obj, best_matrix, best_face, best_hit):
 		best_distance = float("inf")  # use float("inf") (infinity) to have unlimited search range
 		print("Face", face_index)
-		mesh = best_obj.data
+		mesh = best_obj.to_mesh(context.scene, apply_modifiers=True, settings='PREVIEW')
 		#best_matrix = best_obj.matrix_world
 		for vert_index in mesh.polygons[best_face].vertices:
 			vert_coord = mesh.vertices[vert_index].co
@@ -157,6 +146,8 @@ def Rotation(self, context, face, obj):
 	bm.faces.ensure_lookup_table()
 	face = bm.faces[self.ray_faca]
 	o = face.calc_center_median()
+	self.global_loc =  self.ray_obj.matrix_world * face.calc_center_median().copy()
+	self.global_norm = self.ray_obj.matrix_world * (self.global_loc + face.normal.copy()) - self.global_loc
 	def rot(face,o,obj, mw, axis_dst2):
 	
 		axis_src = face.normal
@@ -187,7 +178,6 @@ def Rotation(self, context, face, obj):
 	self.new_obj.location += org
 	bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
 	
-
 def getView(context, event):
 	"""Get Viewport Vector""" 
 	region = context.region
@@ -347,16 +337,13 @@ def ApplyBool(self, context):
 		bpy.context.scene.objects.active = self.edit_mode_obj
 		bpy.ops.object.mode_set(mode='EDIT')
 
-
 def FlipNormal():
 	bpy.ops.object.mode_set(mode='EDIT')
 	bpy.ops.mesh.select_all(action='SELECT')
 	bpy.ops.mesh.normals_make_consistent(inside=False)
 	bpy.ops.object.mode_set(mode='OBJECT')
 
-
-
-class QBox(bpy.types.Operator):
+class SBox(bpy.types.Operator):
 	bl_idname = "objects.stream_box"
 	bl_label = "Stream Box"
 	bl_options = {"REGISTER", "UNDO", "GRAB_CURSOR", "BLOCKING"}
@@ -370,6 +357,8 @@ class QBox(bpy.types.Operator):
 	ray_obj = None # sours object
 	mode = False # Create object for new geometry of boolean "if True then boolean"
 	view = None # vector viev
+	global_loc = None
+	global_norm = None
 	
 ######################################
 			#user setings
@@ -473,10 +462,7 @@ class QBox(bpy.types.Operator):
 				   return {'RUNNING_MODAL'}
 
 				if not isinstance(self.ray_faca,type(None)):
-					global_loc = self.ray_obj.matrix_world * self.ray_obj.data.polygons[self.ray_faca].center
-					global_norm = self.ray_obj.matrix_world * (self.ray_obj.data.polygons[self.ray_faca].center + self.ray_obj.data.polygons[self.ray_faca].normal) - global_loc
-					point = self.ray_obj.data.vertices[self.ray_obj.data.polygons[self.ray_faca].vertices[0]].co.copy()
-					get_pos3d(context, event, global_loc, global_norm)
+					get_pos3d(context, event, self.global_loc, self.global_norm)
 				else:
 					get_pos3d(context, event)
 
@@ -507,16 +493,3 @@ class QBox(bpy.types.Operator):
 		else:
 			self.report({'WARNING'}, "is't 3dview")
 			return {'CANCELLED'}
-
-
-def register():
-	bpy.utils.register_class(QBox)
-
-
-def unregister():
-	bpy.utils.unregister_class(QBox)
-
-
-if __name__ == "__main__":
-	register()
-
