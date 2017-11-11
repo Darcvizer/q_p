@@ -183,12 +183,7 @@ def Rotation(self, context, face, obj):
 
 	self.matrix = self.new_obj.matrix_world.copy()
 
-def CreateCilinder(context):
-	bpy.ops.mesh.primitive_circle_add(vertices=32, fill_type='NGON')
-	new = context.active_object
-	new.scale = Vector((0.00001, 0.00001, 0.00001))
-	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-	return new, context.scene.cursor_location.copy()
+
 
 def FlipNormal():
 	bpy.ops.object.mode_set(mode='EDIT')
@@ -220,7 +215,50 @@ def Scale(self, context):
 		self.ray_obj.modifiers[-1].object = self.new_obj
 
 
+def faceMove(self, context):
+	"""Sets the height of the boxing"""
+	v1 = self.new_obj.matrix_world.inverted() * context.scene.cursor_location
+	normal = None
+	if self.segment <= 4:
+		normal = self.new_obj.data.polygons[2].normal.copy()
+		for i in self.new_obj.data.polygons[self.segment - 2].vertices:
+			v2 = self.new_obj.data.vertices[i].co.copy()
+			dvec = v1-v2
+			dnormal = np.dot(dvec, normal)
+			self.new_obj.data.vertices[i].co += Vector(dnormal*normal)
+	else:
+		normal = self.new_obj.data.polygons[self.segment - 2].normal.copy()
+		for i in self.new_obj.data.polygons[self.segment - 2].vertices:
+			v2 = self.new_obj.data.vertices[i].co.copy()
+			dvec = v1-v2
+			dnormal = np.dot(dvec, normal)
+			self.new_obj.data.vertices[i].co += Vector(dnormal*normal)
 
+	
+def CreateCilinder(self, context):
+	if self.leftMS < 2:
+		bpy.ops.mesh.primitive_circle_add(vertices=32, fill_type='NGON')
+		new = context.active_object
+		new.scale = Vector((0.00001, 0.00001, 0.00001))
+		bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+		return new, context.scene.cursor_location.copy()
+	else:
+		sv = context.scene.cursor_location.copy()
+		context.scene.cursor_location = self.savePos
+		bpy.context.scene.objects.unlink(self.new_obj)
+		bpy.data.objects.remove(self.new_obj)
+		if self.view is None:
+			bpy.ops.mesh.primitive_cylinder_add(vertices=self.segment, radius=self.dist, depth=0.0001)
+		else:
+			bpy.ops.mesh.primitive_cylinder_add(vertices=self.segment, radius=self.dist, depth=1.0)
+		context.scene.cursor_location = context.active_object.matrix_world * context.active_object.data.polygons[self.segment + 1].center.copy()
+		bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+		if self.matrix is not None:
+			context.active_object.matrix_world = self.matrix
+		bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
+		context.scene.cursor_location = sv
+		self.new_obj = context.active_object
+		faceMove(self, context)
 
 def SetSolidify(self, context):
 	self.new_obj.modifiers.new('Solidify', 'SOLIDIFY')
@@ -378,10 +416,11 @@ class SCircle(bpy.types.Operator):
 				Scale(self, context)
 			else:
 				self.segment += 1
-				dist = self.new_obj.modifiers[0].thickness
-				Scale(self, context)
-				SetSolidify(self, context)
-				self.new_obj.modifiers[0].thickness = dist
+				#dist = self.new_obj.modifiers[0].thickness
+				#Scale(self, context)
+				#SetSolidify(self, context)
+				#self.new_obj.modifiers[0].thickness = dist
+				CreateCilinder(self, context)
 
 		if event.type == 'WHEELDOWNMOUSE':
 			if self.leftMS != 2:
@@ -393,26 +432,27 @@ class SCircle(bpy.types.Operator):
 				self.segment -= 1
 				if self.segment < 3:
 					self.segment += 1
-				dist = self.new_obj.modifiers[0].thickness
-				Scale(self, context)
-				SetSolidify(self, context)
-				self.new_obj.modifiers[0].thickness = dist
+				#dist = self.new_obj.modifiers[0].thickness
+				#Scale(self, context)
+				#SetSolidify(self, context)
+				#self.new_obj.modifiers[0].thickness = dist
+				CreateCilinder(self, context)
 		
 		if event.type == 'LEFTMOUSE':
 			if self.leftMS == 0 and not self.ray_faca is None:
-				self.new_obj, self.savePos = CreateCilinder(context)
+				self.new_obj, self.savePos = CreateCilinder(self, context)
 				Rotation(self, context, self.ray_faca, self.ray_obj)
 
 			elif self.leftMS == 0 and self.ray_faca is None:
-				self.new_obj, self.savePos = CreateCilinder(context)
+				self.new_obj, self.savePos = CreateCilinder(self, context)
 
 			elif self.leftMS == 2:
 				#FlipNormal()
 				if self.mode:
-					bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
+					#bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
 					ApplyBool(self, context)
 				elif self.edit_mode_obj:
-					bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
+					#bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
 					bpy.context.scene.objects.active = self.edit_mode_obj
 					self.edit_mode_obj.select = True
 					bpy.ops.object.join()
@@ -423,15 +463,16 @@ class SCircle(bpy.types.Operator):
 			self.leftMS  += 1
 			self.rightMS += 1
 			if self.leftMS == 2:
-				SetSolidify(self, context)
+				CreateCilinder(self, context)
+				#SetSolidify(self, context)
 				if self.view:
-					SetSolidify(self, context)
+					#SetSolidify(self, context)
 					self.new_obj.modifiers[0].thickness = 1
 					if self.mode:
-						bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
+						#bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
 						ApplyBool(self, context)
 					elif self.edit_mode_obj:
-						bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
+						#bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
 						bpy.context.scene.objects.active = self.edit_mode_obj
 						self.edit_mode_obj.select = True
 						bpy.ops.object.join()
@@ -444,12 +485,12 @@ class SCircle(bpy.types.Operator):
 		if event.type == 'RIGHTMOUSE' and not self.ray_faca is None:
 			self.mode = True
 			if self.rightMS == 0 and not self.ray_faca is None:
-				self.new_obj, self.savePos = CreateCilinder(context)
+				self.new_obj, self.savePos = CreateCilinder(self, context)
 				Rotation(self, context, self.ray_faca, self.ray_obj)
 				SetupBool(self, context)
 
 			elif self.rightMS == 0 and self.ray_faca is None:
-				self.new_obj, self.savePos = CreateCilinder(context)
+				self.new_obj, self.savePos = CreateCilinder(self, context)
 
 			elif self.rightMS == 2:
 				ApplyBool(self, context)
@@ -459,7 +500,8 @@ class SCircle(bpy.types.Operator):
 			self.leftMS  += 1
 			self.rightMS += 1
 			if self.rightMS == 2:
-				SetSolidify(self, context)
+				#SetSolidify(self, context)
+				CreateCilinder(self, context)
 				#FlipNormal()
 				if self.view:
 					SetSolidify(self, context)
@@ -498,10 +540,12 @@ class SCircle(bpy.types.Operator):
 			elif self.leftMS == 2 or self.rightMS == 2:
 				if event.ctrl:
 					RayCast(self, context, event, ray_max=1000.0, snap=True)
-					Extrude(self, context)
+					faceMove(self, context)
+					#Extrude(self, context)
 					return {'RUNNING_MODAL'}
 				get_pos3d(context, event, self.new_obj.location , getView(context, event), True)
-				Extrude(self, context)
+				#Extrude(self, context)
+				faceMove(self, context)
 
 
 		return {'RUNNING_MODAL'}
