@@ -278,7 +278,12 @@ def Extrude(self, context):
 	   self.new_obj.modifiers[0].thickness = dist * -1
 	else:
 		self.new_obj.modifiers[0].thickness = dist
-		
+
+def FlipNormal():
+	bpy.ops.object.mode_set(mode='EDIT')
+	bpy.ops.mesh.select_all(action='SELECT')
+	bpy.ops.mesh.normals_make_consistent(inside=False)
+	bpy.ops.object.mode_set(mode='OBJECT')
 	
 def getView(context, event):
 	"""Get Viewport Vector""" 
@@ -447,7 +452,7 @@ class SCircle(bpy.types.Operator):
 				self.new_obj, self.savePos = CreateCilinder(self, context)
 
 			elif self.leftMS == 2:
-				#FlipNormal()
+				FlipNormal()
 				if self.mode:
 					#bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
 					ApplyBool(self, context)
@@ -467,8 +472,9 @@ class SCircle(bpy.types.Operator):
 				#SetSolidify(self, context)
 				if self.view:
 					#SetSolidify(self, context)
-					self.new_obj.modifiers[0].thickness = 1
+					#self.new_obj.modifiers[0].thickness = 1
 					if self.mode:
+						FlipNormal()
 						#bpy.ops.object.modifier_apply(modifier=self.new_obj.modifiers[0].name)
 						ApplyBool(self, context)
 					elif self.edit_mode_obj:
@@ -502,7 +508,7 @@ class SCircle(bpy.types.Operator):
 			if self.rightMS == 2:
 				#SetSolidify(self, context)
 				CreateCilinder(self, context)
-				#FlipNormal()
+				FlipNormal()
 				if self.view:
 					SetSolidify(self, context)
 					self.new_obj.modifiers[0].thickness = 1
@@ -512,8 +518,8 @@ class SCircle(bpy.types.Operator):
 
 
 		if event.type == 'MOUSEMOVE':
-			#if self.rightMS > 0:
-				#FlipNormal()
+			if self.rightMS == 2:
+				FlipNormal()
 			if self.leftMS == 0 and self.rightMS == 0:
 				if event.ctrl:
 					self.ray_faca, self.ray_obj = RayCast(self, context, event, ray_max=1000.0, snap=True)
