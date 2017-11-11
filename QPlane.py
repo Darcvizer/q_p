@@ -262,7 +262,7 @@ class SPlane(bpy.types.Operator):
 					self.edit_mode_obj.select = True
 					bpy.ops.object.join()
 					bpy.ops.object.mode_set(mode='EDIT')
-					context.area.header_text_set()
+				context.area.header_text_set()
 				return {'FINISHED'}
 
 
@@ -284,7 +284,7 @@ class SPlane(bpy.types.Operator):
 					self.edit_mode_obj.select = True
 					bpy.ops.object.join()
 					bpy.ops.object.mode_set(mode='EDIT')
-					context.area.header_text_set()
+				context.area.header_text_set()
 				return {'FINISHED'}
 
 
