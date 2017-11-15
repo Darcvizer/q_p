@@ -117,6 +117,8 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 
 	for obj, matrix in visible_objects_and_duplis():
 		if obj.type == 'MESH':
+			if not self.new_obj is None and self.new_obj.name == obj.name:
+				continue
 			hit, normal, face_index = obj_ray_cast(obj, matrix)
 
 			if hit is not None:
@@ -185,11 +187,9 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 		return None, None
 
 def transfor(self, context):
-	org = self.new_obj.data.polygons[self.segment + 1].center.copy()
+	org = self.new_obj.data.polygons[0].center.copy()
 	self.new_obj.data.transform(Matrix.Translation(-org))
 	self.new_obj.location += org
-	bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
-
 
 	
 
@@ -228,71 +228,6 @@ def Rotation(self, context, face, obj):
 	rot(face,o,self.new_obj, self.ray_obj.matrix_world, Vector((1, 0, 0)))
 
 	bm.free
-
-def faceMove(self, context):
-	"""Sets the height of the boxing"""
-	v1 = self.new_obj.matrix_world.inverted() * context.scene.cursor_location
-	normal = None
-	if self.segment <= 4:
-		normal = self.new_obj.data.polygons[2].normal.copy()
-		for i in self.new_obj.data.polygons[self.segment - 2].vertices:
-			v2 = self.new_obj.data.vertices[i].co.copy()
-			dvec = v1-v2
-			dnormal = np.dot(dvec, normal)
-			self.new_obj.data.vertices[i].co += Vector(dnormal*normal)
-	else:
-		normal = self.new_obj.data.polygons[self.segment - 2].normal.copy()
-		for i in self.new_obj.data.polygons[self.segment - 2].vertices:
-			v2 = self.new_obj.data.vertices[i].co.copy()
-			dvec = v1-v2
-			dnormal = np.dot(dvec, normal)
-			self.new_obj.data.vertices[i].co += Vector(dnormal*normal)
-
-def CreateCilinder(self, context):
-	if self.new_obj:
-		if self.leftMS == 1:
-			self.dist = (self.savePos-context.scene.cursor_location).length
-
-		bpy.context.scene.objects.unlink(self.new_obj)
-		bpy.data.objects.remove(self.new_obj)
-
-	if self.view:
-		bpy.ops.mesh.primitive_cylinder_add(vertices=self.segment, radius=self.dist, depth=2, view_align=True)
-		self.new_obj = context.active_object
-	else:
-		bpy.ops.mesh.primitive_cylinder_add(vertices=self.segment, radius=self.dist, depth=0.0001, view_align=False)
-		self.new_obj = context.active_object
-
-	if self.savePos is None:
-		self.savePos = context.scene.cursor_location.copy()
-
-	if not self.matrix is None:
-			context.active_object.matrix_world = self.matrix
-	if self.new_obj:
-		try:
-			transfor(self, context)
-			self.new_obj.location = self.savePos
-		except:
-			pass
-
-	if self.mode:
-		if self.segment <= 4:
-			normal = self.new_obj.data.polygons[2].normal.copy()
-			for i in self.new_obj.data.vertices:
-				i.co += normal * 0.001
-
-		else:
-			normal = self.new_obj.data.polygons[self.segment - 2].normal.copy()
-			for i in self.new_obj.data.vertices:
-				i.co += normal * 0.001
-		if self.leftMS > 0:
-			self.new_obj.draw_type = 'WIRE'
-			self.ray_obj.modifiers[-1].object = self.new_obj
-	
-	if self.leftMS == 2 and not self.view:
-		faceMove(self, context)
-
-
 def getView(context, event):
 	"""Get Viewport Vector""" 
 	region = context.region
@@ -341,6 +276,57 @@ def findView(self, context, event):
 		self.view = False
 		return False
 
+def CreateCircle(self, context):
+	if self.view:
+		if self.fill:
+			bpy.ops.mesh.primitive_circle_add(vertices=self.segment,fill_type='NGON', radius=0.00001,view_align=True)
+		else:
+			bpy.ops.mesh.primitive_circle_add(vertices=self.segment,fill_type='NOTHING', radius=0.00001,view_align=True)
+	else:
+		if self.fill:
+			bpy.ops.mesh.primitive_circle_add(vertices=self.segment,fill_type='NGON', radius=0.00001,view_align=False)
+		else:
+			bpy.ops.mesh.primitive_circle_add(vertices=self.segment,fill_type='NOTHING', radius=0.00001,view_align=False)
+	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+	new = context.active_object
+	return new, new.location.copy()
+
+def Scale(self, context):
+	loc = context.scene.cursor_location.copy()
+	dist = (self.savePos-context.scene.cursor_location.copy()).length
+
+	bpy.context.scene.objects.unlink(self.new_obj)
+	bpy.data.objects.remove(self.new_obj)
+
+	if self.view:
+		if self.fill:
+			bpy.ops.mesh.primitive_circle_add(vertices=self.segment,fill_type='NGON', radius=dist,view_align=True)
+		else:
+			bpy.ops.mesh.primitive_circle_add(vertices=self.segment,fill_type='NOTHING', radius=dist,view_align=True)
+	else:
+		if self.fill:
+			bpy.ops.mesh.primitive_circle_add(vertices=self.segment,fill_type='NGON', radius=dist,view_align=False)
+		else:
+			bpy.ops.mesh.primitive_circle_add(vertices=self.segment,fill_type='NOTHING', radius=dist,view_align=False)
+	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+	self.new_obj = context.active_object
+	
+	if self.matrix is not None:
+		self.new_obj.matrix_world = self.matrix
+
+	self.new_obj.location = self.savePos
+
+	self.new_obj.scale[0] = dist
+	self.new_obj.scale[1] = dist
+	self.new_obj.scale[2] = dist
+	
+	if self.mode:
+		self.new_obj.draw_type = 'WIRE'
+		self.ray_obj.modifiers[-1].object = self.new_obj
+	
+
+
+
 def SetupBool(self, context):
 	"""Setup Object For Boolean"""
 	self.new_obj.draw_type = 'WIRE'
@@ -364,137 +350,69 @@ def SetupBool(self, context):
 	self.ray_obj.show_all_edges = True
 	
 
-def ApplyBool(self, context):
-	bpy.context.scene.objects.active = self.ray_obj
-	bpy.ops.object.modifier_apply(modifier=self.ray_obj.modifiers[-1].name)
-
-	for i in self.ray_obj.modifiers:
-		if i in self.u_modifier:
-			i.show_viewport = True
-
-	self.ray_obj.show_wire = self.show_wire
-	self.ray_obj.show_all_edges = self.show_all_edges
-	bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge = self.auto_merge
-
-	bpy.context.scene.objects.unlink(self.new_obj)
-	bpy.data.objects.remove(self.new_obj)
-
-	if self.edit_mode_obj:
-		bpy.context.scene.objects.active = self.edit_mode_obj
-		bpy.ops.object.mode_set(mode='EDIT')
-
-def FlipNormal():
-	bpy.ops.object.mode_set(mode='EDIT')
-	bpy.ops.mesh.select_all(action='SELECT')
-	bpy.ops.mesh.normals_make_consistent(inside=False)
-	bpy.ops.object.mode_set(mode='OBJECT')
-
-
-
-
-
-
-
-
-class SCylinder(bpy.types.Operator):
-	bl_idname = "objects.stream_cylinder"
-	bl_label = "Stream Cylinder"
+class SCircle(bpy.types.Operator):
+	bl_idname = "objects.stream_circle"
+	bl_label = "Stream Circle"
 	bl_options = {"REGISTER", "UNDO", "GRAB_CURSOR", "BLOCKING"}
 
-#   		# Main Variable
-# ######################################
-#   leftMS = 0 # Left Mouse State
-#   rightMS = 0 # Right Mouse State
-#   midMS = False
-#   new_obj = None # New object
-#   ray_faca = None # Face for rotation
-#   ray_obj = None # sours object
-#   mode = False # Create object for new geometry of boolean "if True then boolean"
-#   view = None # vector viev
-#   savePos = None
-#   segment = 32
-#   matrix = None
-#   global_loc = None
-#   global_norm = None
-#   dist = 0.0001
-#   panel_points = []
-	
-# ######################################
-#   		#user setings
-#   show_wire = None
-#   show_all_edges = None
-#   u_modifier = [] # Save state, need for boolean mode
-#   auto_merge = None
-#   edit_mode_obj = None
-# ######################################
+
 
 	@classmethod
 	def poll(cls, context):
 		return (context.mode == "EDIT_MESH") or (context.mode == "OBJECT")
 
 	def modal(self, context, event):
-		st = "LMB: Create New Premetive, RMB: Boolean, MMB:Fix Graund, CTRL: Snaping WMUP: Add Segment, WMDOWN: Remove Segment, Count Segment(" + str(self.segment) + ")"
+		st = "LMB: Create New Premetive,RMB: Fill Mode, MMB:Fix Graund, CTRL: Snaping WMUP: Add Segment, WMDOWN: Remove Segment, Count Segment(" + str(self.segment) + ")"
 		context.area.header_text_set(st)
-		if event.alt:
-			return {'PASS_THROUGH'}
-
+		
 		if event.type == 'WHEELUPMOUSE':
-			self.segment += 1
-			CreateCilinder(self, context)
+				self.segment += 1
+				Scale(self, context)
 
 
 		if event.type == 'WHEELDOWNMOUSE':
 			if not self.segment == 3:
 				self.segment -= 1
-				CreateCilinder(self, context)
+				Scale(self, context)
 
 		
 		if event.type == 'LEFTMOUSE':
 			if self.leftMS == 0 and not self.ray_faca is None:
-				CreateCilinder(self, context)
+				self.new_obj, self.savePos = CreateCircle(self, context)
 				if self.midMS:
 					self.new_obj.matrix_world = self.matrix
+					self.new_obj.location = self.savePos
+
 				else:
 					Rotation(self, context, self.ray_faca, self.ray_obj)
-				
-			elif self.leftMS == 0 and self.ray_faca is None:
-				CreateCilinder(self, context)
+					self.new_obj.location = self.savePos
 
-			elif self.leftMS == 2:
+			elif self.leftMS == 0 and self.ray_faca is None:
+				self.new_obj, self.savePos = CreateCircle(self, context)
+
+			self.leftMS  += 1
+			self.rightMS += 1
+			if self.leftMS == 2:
 				self.panel_points = []
-				FlipNormal()
-				if self.mode:
-					ApplyBool(self, context)
-				elif self.edit_mode_obj:
+				if self.edit_mode_obj:
 					bpy.context.scene.objects.active = self.edit_mode_obj
 					self.edit_mode_obj.select = True
 					bpy.ops.object.join()
 					bpy.ops.object.mode_set(mode='EDIT')
 				context.area.header_text_set()
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 				if not self.mesh[0] is None:
 					bpy.data.meshes.remove(self.mesh[0])
+
 				return {'FINISHED'}
-
-			self.leftMS  += 1
-			self.rightMS += 1
-			if self.leftMS == 2:
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-				CreateCilinder(self, context)
-				if self.view:
-					if self.mode:
-						FlipNormal()
-						ApplyBool(self, context)
-					elif self.edit_mode_obj:
-						bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-						bpy.context.scene.objects.active = self.edit_mode_obj
-						self.edit_mode_obj.select = True
-						bpy.ops.object.join()
-						bpy.ops.object.mode_set(mode='EDIT')
-					context.area.header_text_set()
-					if not self.mesh[0] is None:
-						bpy.data.meshes.remove(self.mesh[0])
-					return {'FINISHED'}
-
+			
+		if event.type == 'RIGHTMOUSE' and event.value == 'RELEASE':
+			if self.fill:
+				self.fill = False
+			else:
+				self.fill = True
+			Scale(self, context)
+			
 		if event.type == 'MIDDLEMOUSE':
 
 			if event.ctrl:
@@ -505,53 +423,15 @@ class SCylinder(bpy.types.Operator):
 				Rotation(self, context, self.ray_faca, self.ray_obj)
 				self.midMS = True
 
-		if event.type == 'RIGHTMOUSE' and not self.ray_faca is None:
-			self.mode = True
-			if self.leftMS == 0 and not self.ray_faca is None:
-				CreateCilinder(self, context)
-				if self.midMS:
-					self.new_obj.matrix_world = self.matrix
-				else:
-					Rotation(self, context, self.ray_faca, self.ray_obj)
-				
-				SetupBool(self, context)
-			elif self.leftMS == 0 and self.ray_faca is None:
-				CreateCilinder(self, context)
-
-			elif self.rightMS == 2:
-				self.panel_points = []
-				ApplyBool(self, context)
-				context.area.header_text_set()
-				if not self.mesh[0] is None:
-					bpy.data.meshes.remove(self.mesh[0])
-				return {'FINISHED'}
-
-			self.leftMS  += 1
-			self.rightMS += 1
-			if self.rightMS == 2:
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-				CreateCilinder(self, context)
-				FlipNormal()
-				if self.view:
-					SetSolidify(self, context)
-					self.new_obj.modifiers[0].thickness = 1
-					ApplyBool(self, context)
-					context.area.header_text_set()
-					if not self.mesh[0] is None:
-						bpy.data.meshes.remove(self.mesh[0])
-					return {'FINISHED'}
-
-
 		if event.type == 'MOUSEMOVE':
-			if self.rightMS == 2:
-				FlipNormal()
+			#if self.rightMS > 0:
+				#FlipNormal()
 			if self.leftMS == 0 and self.rightMS == 0:
 				if self.midMS:
-					
 					if event.ctrl:
 						RayCast(self, context, event, ray_max=1000.0, snap=True)
 					else:
-						get_pos3d(self,context, event, self.global_loc, self.global_norm)
+						get_pos3d(self, context, event, self.global_loc, self.global_norm)
 
 				else:
 					self.panel_points = []
@@ -560,30 +440,22 @@ class SCylinder(bpy.types.Operator):
 					else:
 						self.ray_faca, self.ray_obj = RayCast(self, context, event, ray_max=1000.0,snap=False)
 					if isinstance(self.ray_faca,type(None)):
-						get_pos3d(self,context, event)
+						get_pos3d(self, context, event)
 						self.ray_obj = None
 						self.ray_faca = None
 
 			elif self.leftMS == 1 or self.rightMS == 1:
 				if event.ctrl:
 					RayCast(self, context, event, ray_max=1000.0, snap=True)
-					CreateCilinder(self, context)
+					Scale(self, context)
 					return {'RUNNING_MODAL'}
 
 				if not isinstance(self.ray_faca,type(None)):
-					get_pos3d(self,context, event, self.global_loc, self.global_norm)
+					get_pos3d(self, context, event, self.global_loc, self.global_norm)
 				else:
-					get_pos3d(self,context, event)
+					get_pos3d(self, context, event)
 
-				CreateCilinder(self, context)
-
-			elif self.leftMS == 2 or self.rightMS == 2:
-				if event.ctrl:
-					RayCast(self, context, event, ray_max=1000.0, snap=True)
-					faceMove(self, context)
-					return {'RUNNING_MODAL'}
-				get_pos3d(self, context, event, self.new_obj.location , getView(context, event), True)
-				faceMove(self, context)
+				Scale(self, context)
 
 
 		return {'RUNNING_MODAL'}
@@ -607,21 +479,19 @@ class SCylinder(bpy.types.Operator):
 			self.matrix = None
 			self.global_loc = None
 			self.global_norm = None
-			self.dist = 0.0001
+			self.dist = None
 			self.panel_points = []
 			self.mesh = [None, None] # 0 - mesh , 1 name obj
-			
-		######################################
-					#user setings
+			self.fill = None
+		
+		####################################
+				#user setings
 			self.show_wire = None
 			self.show_all_edges = None
 			self.u_modifier = [] # Save state, need for boolean mode
 			self.auto_merge = None
 			self.edit_mode_obj = None
 		######################################
-
-			context.window_manager.modal_handler_add(self)
-
 			if context.mode == "EDIT_MESH":
 				self.edit_mode_obj = context.active_object
 				bpy.ops.mesh.select_all(action='DESELECT')
@@ -629,6 +499,7 @@ class SCylinder(bpy.types.Operator):
 			findView(self, context, event)
 			args = (self, context)
 			self._handle = bpy.types.SpaceView3D.draw_handler_add(draw_callback_px, args, 'WINDOW', 'POST_PIXEL')
+			context.window_manager.modal_handler_add(self)
 			return {'RUNNING_MODAL'}
 		else:
 			self.report({'WARNING'}, "is't 3dview")

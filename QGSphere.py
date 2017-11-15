@@ -120,7 +120,6 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 			if not self.new_obj is None and self.new_obj.name == obj.name:
 				continue
 			hit, normal, face_index = obj_ray_cast(obj, matrix)
-
 			if hit is not None:
 				hit_world = matrix * hit
 				scene.cursor_location = hit_world
@@ -187,7 +186,7 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 		return None, None
 
 def transfor(self, context):
-	org = self.new_obj.data.vertices[3].co.copy()
+	org = self.new_obj.data.vertices[6].co.copy()
 	self.new_obj.data.transform(Matrix.Translation(-org))
 	self.new_obj.location += org
 	bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
@@ -230,174 +229,164 @@ def Rotation(self, context, face, obj):
 
 	bm.free
 
-	if self.new_obj:
-		transfor(self, context)
 
-def CreatePlane(self, context, event, mode):
-	"""create new obj"""
-	if self.view:
-		bpy.ops.mesh.primitive_plane_add(view_align=True)
-	else:
-		bpy.ops.mesh.primitive_plane_add()
-	new = context.active_object
-	new.scale = Vector((0.00001, 0.00001, 0.0001))
+def CreateSphere(context):
+	bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=4, size=0.0001)
 	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-	org = new.data.vertices[3].co.copy()
-	new.data.transform(Matrix.Translation(-org))
-	new.location += org
-	bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
-	return new
+	new = context.active_object
+	return new, new.location.copy()
 
-def MoveVerts(self, context, event, compress=False):
-	"""Moving the first vertives to create an area"""
-	v1 =self.new_obj.matrix_world.inverted() * context.scene.cursor_location
+def Scale(self, context):
+	if self.new_obj:
+		self.dist = (self.savePos-context.scene.cursor_location.copy()).length
+		bpy.context.scene.objects.unlink(self.new_obj)
+		bpy.data.objects.remove(self.new_obj)
 
-	self.new_obj.data.vertices[0].co = v1
-
-	if compress:
-		dvec = v1-self.new_obj.data.vertices[1].co.copy()
-		dnormal = np.dot(dvec, self.direct1)
-		self.new_obj.data.vertices[1].co += Vector(dnormal*self.direct1)
-
-		self.new_obj.data.vertices[2].co = self.new_obj.data.vertices[3].co.copy()
-
-		dist = (self.new_obj.data.vertices[1].co.copy() - self.new_obj.data.vertices[3].co.copy()).length
-		self.new_obj.data.vertices[2].co += self.direct2 * dist
-
-		dvec = self.new_obj.data.vertices[1].co.copy()-self.new_obj.data.vertices[0].co.copy()
-		dnormal = np.dot(dvec, self.direct1)
-		self.new_obj.data.vertices[0].co += Vector(dnormal*self.direct1)
-
-		dvec = self.new_obj.data.vertices[2].co.copy()-self.new_obj.data.vertices[0].co.copy()
-		dnormal = np.dot(dvec, self.direct2)
-		self.new_obj.data.vertices[0].co += Vector(dnormal*self.direct2)
-
-
+	bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=self.segment, size=1)
+	
+	#context.scene.cursor_location = sv
+	self.new_obj = context.active_object
+	if self.matrix is not None:
+		self.new_obj.matrix_world = self.matrix
+		self.new_obj.location = self.savePos.copy()
 	else:
-		dvec = v1-self.new_obj.data.vertices[1].co.copy()
-		dnormal = np.dot(dvec, self.direct1)
-		self.new_obj.data.vertices[1].co += Vector(dnormal*self.direct1)
+		self.new_obj.location = self.savePos.copy()
 
-		dvec = v1-self.new_obj.data.vertices[2].co.copy()
-		dnormal = np.dot(dvec, self.direct2)
-		self.new_obj.data.vertices[2].co += Vector(dnormal*self.direct2)
+	self.new_obj.scale[0] = self.dist
+	self.new_obj.scale[1] = self.dist
+	self.new_obj.scale[2] = self.dist
+	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
+	if self.mode:
+		self.new_obj.draw_type = 'WIRE'
+		self.ray_obj.modifiers[-1].object = self.new_obj
+	
 
-def getView(context, event):
-	"""Get Viewport Vector""" 
-	region = context.region
-	rv3d = context.region_data
-	coord = event.mouse_region_x, event.mouse_region_y
-	return rv3d.view_rotation * Vector((0.0, 0.0, -1.0))
+def SetupBool(self, context):
+	"""Setup Object For Boolean"""
+	self.new_obj.draw_type = 'WIRE'
+	for i in self.ray_obj.modifiers:
+		if i.show_viewport:
+			self.u_modifier.append(i)
+			i.show_viewport = False
 
-def PerspOrOrtot():
-	for area in bpy.context.screen.areas:
-		if area.type == 'VIEW_3D':
-			for space in area.spaces:
-				if space.type == 'VIEW_3D':
-					if space.region_3d.is_perspective:
-						return False
-					else:
-						return True
+	bpy.context.scene.objects.active = self.ray_obj
+	bpy.ops.object.modifier_add(type='BOOLEAN')
+	self.ray_obj.modifiers[-1].operation = 'DIFFERENCE'
+	self.ray_obj.modifiers[-1].object = self.new_obj
+	self.ray_obj.modifiers[-1].solver = 'CARVE'
 
-def findView(self, context, event):
-	"""Get Viewport State
-	Use in def CreateBox()"""
+	self.show_wire = self.ray_obj.show_wire
+	self.show_all_edges = self.ray_obj.show_all_edges
+	bpy.context.scene.objects.active = self.new_obj
+	self.auto_merge = bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge
+	bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge = False
+	self.ray_obj.show_wire = True
+	self.ray_obj.show_all_edges = True
+	
 
-	if PerspOrOrtot():
-		view = getView(context, event)
-		if view == Vector((0.0, -1.0, 0.0)):
-			self.view = True
-			return True
-		elif view == Vector((0.0, 1.0, 0.0)):
-			self.view = True
-			return True
-		elif view == Vector((1.0, 0.0, 0.0)):
-			self.view = True
-			return True
-		elif view == Vector((-1.0, 0.0, 0.0)):
-			self.view = True
-			return True
-		elif view == Vector((0.0, 0.0, 1.0)):
-			self.view = True
-			return True
-		elif view == Vector((0.0, 0.0, -1.0)):
-			self.view = True
-			return True
-		else:
-			self.view = False
-			return False
-	else:
-		self.view = False
-		return False
+def ApplyBool(self, context):
+	bpy.context.scene.objects.active = self.ray_obj
+	bpy.ops.object.modifier_apply(modifier=self.ray_obj.modifiers[-1].name)
 
-class SPlane(bpy.types.Operator):
-	bl_idname = "objects.stream_plane"
-	bl_label = "Stream Plane"
+	for i in self.ray_obj.modifiers:
+		if i in self.u_modifier:
+			i.show_viewport = True
+
+	self.ray_obj.show_wire = self.show_wire
+	self.ray_obj.show_all_edges = self.show_all_edges
+	bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge = self.auto_merge
+
+	bpy.context.scene.objects.unlink(self.new_obj)
+	bpy.data.objects.remove(self.new_obj)
+
+	if self.edit_mode_obj:
+		bpy.context.scene.objects.active = self.edit_mode_obj
+		bpy.ops.object.mode_set(mode='EDIT')
+
+class SGSphere(bpy.types.Operator):
+	bl_idname = "objects.stream_ico_sphere"
+	bl_label = "Stream Ico Sphere"
 	bl_options = {"REGISTER", "UNDO", "GRAB_CURSOR", "BLOCKING"}
 
-# 			# Main Variable
-# ######################################
-# 	leftMS = 0 # Left Mouse State
-# 	rightMS = 0 # Right Mouse State
-# 	midMS = False
-# 	new_obj = None # New object
-# 	ray_faca = None # Face for rotation
-# 	ray_obj = None # sours object
-# 	mode = False # Create object for new geometry of boolean "if True then boolean"
-# 	view = None # vector viev
-# 	global_loc = None
-# 	global_norm = None
-# 	panel_points = []
-	
-# ######################################
-# 			#user setings
-# 	show_wire = None
-# 	show_all_edges = None
-# 	u_modifier = [] # Save state, need for boolean mode
-# 	auto_merge = None
-# 	edit_mode_obj = None
-# ######################################
+		
 
 	@classmethod
 	def poll(cls, context):
 		return (context.mode == "EDIT_MESH") or (context.mode == "OBJECT")
 
 	def modal(self, context, event):
-		context.area.header_text_set("LMB: Create New Premetive, MMB:Fix Graund, CTRL: Snaping, SHIFT: Proportional Shift")
+		st = "LMB: Create New Premetive, RMB: Boolean, MMB:Fix Graund, CTRL: Snaping WMUP: Add Segment, WMDOWN: Remove Segment, Count Segment(" + str(self.segment) + ")"
+		context.area.header_text_set(st)
 		if event.alt:
 			return {'PASS_THROUGH'}
 
+		if event.type == 'WHEELUPMOUSE':
+				self.segment += 1
+				Scale(self, context)
+
+
+		if event.type == 'WHEELDOWNMOUSE':
+			if not self.segment == 3:
+				self.segment -= 1
+				Scale(self, context)
+
+		
 		if event.type == 'LEFTMOUSE':
+			self.panel_points = []
 			if self.leftMS == 0 and not self.ray_faca is None:
-				self.new_obj = CreatePlane(self, context, event, self.mode)
+				self.new_obj, self.savePos = CreateSphere(context)
 				if self.midMS:
 					self.new_obj.matrix_world = self.matrix
-					bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
-					#self.new_obj.location = self.savePos
+					self.new_obj.location = self.savePos
 				else:
 					Rotation(self, context, self.ray_faca, self.ray_obj)
-			elif self.leftMS == 0 and self.ray_faca is None:
-				self.new_obj = CreatePlane(self, context, event, self.mode)
 
-				
-			self.direct1 = (self.new_obj.data.vertices[3].co.copy()-self.new_obj.data.vertices[1].co.copy()).normalized()
-			self.direct2 = (self.new_obj.data.vertices[3].co.copy()-self.new_obj.data.vertices[2].co.copy()).normalized()
-				
+			elif self.leftMS == 0 and self.ray_faca is None:
+				self.new_obj, self.savePos = CreateSphere(context)
 
 			self.leftMS  += 1
 			self.rightMS += 1
 			if self.leftMS == 2:
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 				self.panel_points = []
-				bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-				if self.edit_mode_obj:
+				if self.mode:
+					ApplyBool(self, context)
+				elif self.edit_mode_obj:
 					bpy.context.scene.objects.active = self.edit_mode_obj
 					self.edit_mode_obj.select = True
 					bpy.ops.object.join()
 					bpy.ops.object.mode_set(mode='EDIT')
+				context.area.header_text_set()
 				if not self.mesh[0] is None:
 					bpy.data.meshes.remove(self.mesh[0])
+				return {'FINISHED'}
+
+
+
+		if event.type == 'RIGHTMOUSE' and not self.ray_faca is None:
+			self.mode = True
+			self.panel_points = []
+			if self.rightMS == 0 and not self.ray_faca is None:
+				self.new_obj, self.savePos = CreateSphere(context)
+				if self.midMS:
+					self.new_obj.matrix_world = self.matrix
+				else:
+					Rotation(self, context, self.ray_faca, self.ray_obj)
+				SetupBool(self, context)
+			elif self.rightMS == 0 and self.ray_faca is None:
+				self.new_obj, self.savePos = CreateSphere(context)
+
+
+
+			self.leftMS  += 1
+			self.rightMS += 1
+			if self.rightMS == 2:
+				self.panel_points = []
+				ApplyBool(self, context)
 				context.area.header_text_set()
+				if not self.mesh[0] is None:
+					bpy.data.meshes.remove(self.mesh[0])
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 				return {'FINISHED'}
 
@@ -411,41 +400,14 @@ class SPlane(bpy.types.Operator):
 				Rotation(self, context, self.ray_faca, self.ray_obj)
 				self.midMS = True
 
-		if event.type == 'RIGHTMOUSE' and not self.ray_faca is None:
-			if self.leftMS == 0 and not self.ray_faca is None:
-				self.new_obj = CreatePlane(self, context, event, self.mode)
-				if self.midMS:
-					self.new_obj.matrix_world = self.matrix
-					bpy.ops.view3d.snap_selected_to_cursor(use_offset=False)
-				else:
-					Rotation(self, context, self.ray_faca, self.ray_obj)
-
-				self.direct1 = (self.new_obj.data.vertices[3].co.copy()-self.new_obj.data.vertices[1].co.copy()).normalized()
-				self.direct2 = (self.new_obj.data.vertices[3].co.copy()-self.new_obj.data.vertices[2].co.copy()).normalized()
-
-			elif self.leftMS == 0 and self.ray_faca is None:
-				self.new_obj = CreatePlane(self, context, event, self.mode)
-
-			self.leftMS  += 1
-			self.rightMS += 1
-			if self.leftMS == 2:
-				self.panel_points = []
-				bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-				if self.edit_mode_obj:
-					bpy.context.scene.objects.active = self.edit_mode_obj
-					self.edit_mode_obj.select = True
-					bpy.ops.object.join()
-					bpy.ops.object.mode_set(mode='EDIT')
-				if not self.mesh[0] is None:
-					bpy.data.meshes.remove(self.mesh[0])
-				context.area.header_text_set()
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-				return {'FINISHED'}
-
+			
 
 		if event.type == 'MOUSEMOVE':
+			#if self.rightMS > 0:
+				#FlipNormal()
 			if self.leftMS == 0 and self.rightMS == 0:
 				if self.midMS:
+					
 					if event.ctrl:
 						RayCast(self, context, event, ray_max=1000.0, snap=True)
 					else:
@@ -463,25 +425,18 @@ class SPlane(bpy.types.Operator):
 						self.ray_faca = None
 
 			elif self.leftMS == 1 or self.rightMS == 1:
-				print('new obj1', self.new_obj)
 				if event.ctrl:
+
 					RayCast(self, context, event, ray_max=1000.0, snap=True)
-					if event.shift:
-						MoveVerts(self, context, event, compress=True)
-					else:
-						MoveVerts(self, context, event)
+					Scale(self, context)
 					return {'RUNNING_MODAL'}
-				print('new obj2', self.new_obj)
+
 				if not isinstance(self.ray_faca,type(None)):
 					get_pos3d(self, context, event, self.global_loc, self.global_norm)
 				else:
 					get_pos3d(self, context, event)
-				print('new obj3', self.new_obj)
-				if event.shift:
-					MoveVerts(self, context, event, compress=True)
-				else:
-					MoveVerts(self, context, event)
 
+				Scale(self, context)
 
 
 		return {'RUNNING_MODAL'}
@@ -490,6 +445,7 @@ class SPlane(bpy.types.Operator):
 
 	def invoke(self, context, event):
 		if context.space_data.type == 'VIEW_3D':
+
 						# Main Variable
 		######################################
 			self.leftMS = 0 # Left Mouse State
@@ -500,12 +456,15 @@ class SPlane(bpy.types.Operator):
 			self.ray_obj = None # sours object
 			self.mode = False # Create object for new geometry of boolean "if True then boolean"
 			self.view = None # vector viev
+			self.savePos = None
+			self.segment = 4
+			self.matrix = None
 			self.global_loc = None
 			self.global_norm = None
-			self.panel_points = []
+			self.dist = None
+			self.panel_points = [] 
 			self.mesh = [None, None] # 0 - mesh , 1 name obj
-			self.direct1 = None
-			self.direct2 = None
+			self.dist = 0.0001
 			
 		######################################
 					#user setings
@@ -519,10 +478,9 @@ class SPlane(bpy.types.Operator):
 				self.edit_mode_obj = context.active_object
 				bpy.ops.mesh.select_all(action='DESELECT')
 				bpy.ops.object.mode_set(mode='OBJECT')
-			findView(self, context, event)
 			args = (self, context)
 			self._handle = bpy.types.SpaceView3D.draw_handler_add(draw_callback_px, args, 'WINDOW', 'POST_PIXEL')
-			self.mesh = [None, None] # 0 - mesh , 1 name obj
+			
 			context.window_manager.modal_handler_add(self)
 			return {'RUNNING_MODAL'}
 		else:

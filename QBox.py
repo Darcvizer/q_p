@@ -117,6 +117,8 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 
 	for obj, matrix in visible_objects_and_duplis():
 		if obj.type == 'MESH':
+			if not self.new_obj is None and self.new_obj.name == obj.name:
+				continue
 			hit, normal, face_index = obj_ray_cast(obj, matrix)
 
 			if hit is not None:
@@ -225,9 +227,6 @@ def Rotation(self, context, face, obj):
 		print('matrix',matrix_rotate)
 	
 	rot(face,o,self.new_obj, self.ray_obj.matrix_world, Vector((1, 0, 0)))
-
-
-
 
 	bm.free
 
@@ -637,15 +636,3 @@ class SBox(bpy.types.Operator):
 			self.report({'WARNING'}, "is't 3dview")
 			return {'CANCELLED'}
 
-def register():
-
-	bpy.utils.register_class(SBox)
-
-	
-def unregister():
-
-	bpy.utils.unregister_class(SBox)
-
-
-if __name__ == "__main__":
-	register()
