@@ -4,6 +4,7 @@ import bgl
 from bgl import glVertex3f
 from mathutils import Vector, Matrix
 from bpy_extras import view3d_utils
+from mathutils import bvhtree
 import numpy as np
 from mathutils.geometry import intersect_line_plane
 from mathutils.geometry import tessellate_polygon as tessellate
@@ -101,7 +102,8 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 		d = ray_direction_obj.length
 
 		ray_direction_obj.normalized()
-
+		##############
+		FromObject(obj, context.scene, deform=True, render=False, cage=False, epsilon=0.0)
 		success, location, normal, face_index = obj.ray_cast(ray_origin_obj, ray_direction_obj)
 		if face_index != -1:
 			return location, normal, face_index
