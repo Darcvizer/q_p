@@ -1,9 +1,9 @@
 ## ______________ Begin Python Code example _____________ ##
 
 bl_info = {
-	"name": "qqq",
+	"name": "q_p",
 	"author": "Vladislav Kindushov, Alexander Nedovizin",
-	"version": (0, 0, 3),
+	"version": (0, 0, 9),
 	"blender": (2, 79, 0),
 	"description": "Interactive creation of primitives",
 	"category": "Object" }
@@ -15,7 +15,7 @@ from bpy.props import (
 		EnumProperty,
 		)
 from . import (
-		qboxx,
+		QBox,
 		QCylinder,
 		QSphere,
 		QPlane,
@@ -59,7 +59,7 @@ class AddonPreferencesQP(bpy.types.AddonPreferences):
 
 def register():
 	bpy.utils.register_class(VIEW3D_PIE_q_p)
-	bpy.utils.register_class(qboxx.SBox)
+	bpy.utils.register_class(QBox.SBox)
 	bpy.utils.register_class(QCylinder.SCylinder)
 	bpy.utils.register_class(QSphere.SSphere)
 	bpy.utils.register_class(QPlane.SPlane)
@@ -72,7 +72,7 @@ def register():
 	
 def unregister():
 	bpy.utils.unregister_class(VIEW3D_PIE_q_p)
-	bpy.utils.unregister_class(qboxx.SBox)
+	bpy.utils.unregister_class(QBox.SBox)
 	bpy.utils.unregister_class(QCylinder.SCylinder)
 	bpy.utils.unregister_class(QSphere.SSphere)
 	bpy.utils.unregister_class(QPlane.SPlane)

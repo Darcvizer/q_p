@@ -65,7 +65,10 @@ def draw_callback_pv(self, context):
 	scale = 2.0
 	zoom_scale = 3.0
 	bgl.glEnable(bgl.GL_BLEND)
-	bgl.glColor4f(0.471938, 0.530946, 0.8, 0.06)
+	if not self.faceComstrain:
+		bgl.glColor4f(0.471938, 0.530946, 0.8, 0.06)
+	else:
+		bgl.glColor4f(0.365066, 0.819318, 0.906332,0.06)
 	bgl.glBegin(bgl.GL_POLYGON)
 	
 	bgl.glVertex3f(*(mw * ((zoom / zoom_scale) * (scale * Vector((1.0, 1.0, 0.0))))))
@@ -461,3 +464,139 @@ def FlipNormal():
 	bpy.ops.mesh.select_all(action='SELECT')
 	bpy.ops.mesh.normals_make_consistent(inside=False)
 	bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def FirstState(self, context, event):
+	if not self.faceComstrain:
+		if event.ctrl:
+			self.ray_faca, self.ray_obj, self.mouseLocation, self.dir_longest_edge = RayCast(self, context, event,
+			                                                                                 ray_max=1000.0, snap=True)
+		else:
+			self.ray_faca, self.ray_obj, self.mouseLocation, self.dir_longest_edge = RayCast(self, context, event,
+			                                                                                 ray_max=1000.0, snap=False)
+		if self.ray_faca is None:
+			self.panel_points = []
+			self.mouseLocation = get_pos3d(self, context, event)
+		else:
+			self.global_norm = self.ray_obj.matrix_world.to_3x3() * self.mesh.polygons[self.ray_faca].normal.copy()
+			self.global_loc = self.ray_obj.matrix_world * self.mesh.polygons[self.ray_faca].center.copy()
+			self.matrix = Rotation(self.ray_faca, self.ray_obj, self.dir_longest_edge, self.mesh)
+	
+	elif self.faceComstrain:
+		self.mouseLocation = get_pos3d(self, context, event, self.global_loc, self.global_norm)
+		if not self.mouseLocation:
+			self.faceComstrain = False
+			FirstState(self, context, event)
+
+
+def SecondState(self, context, event):
+	if event.ctrl:
+		self.mouseLocation = RayCast(self, context, event, ray_max=1000.0, snap=True)[2]
+		if event.shift and not event.type == 'MIDDLEMOUSE':
+			self.moveStep1(self, True)
+		else:
+			self.moveStep1(self)
+	else:
+		self.mouseLocation = get_pos3d(self, context, event, self.global_loc, self.global_norm)
+		
+		if event.shift and not event.type == 'MIDDLEMOUSE':
+			self.moveStep1(self, True)
+		else:
+			self.moveStep1(self)
+
+
+def ThirdState(self, context, event):
+	if event.ctrl:
+		self.mouseLocation = RayCast(self, context, event, ray_max=1000.0, snap=True)[2]
+		if event.shift and not event.type == 'MIDDLEMOUSE':
+			self.moveStep2(self, True)
+		else:
+			self.moveStep2(self)
+	else:
+		self.mouseLocation = get_pos3d(self, context, event, self.global_loc, self.global_norm, True)
+		
+		if event.shift and not event.type == 'MIDDLEMOUSE':
+			self.moveStep2(self, True)
+		else:
+			self.moveStep2(self)
+			
+	hit = FindNormal(self.new_obj, 4, 5)
+	if not hit is None:
+		FlipNormal()
+
+def LeftMouseClick(self, context, event):
+	if self.mouseState == 0:
+		if not self.ray_faca is None:
+			self.global_norm = self.ray_obj.matrix_world.to_3x3() * self.mesh.polygons[self.ray_faca].normal.copy()
+			self.global_loc = self.ray_obj.matrix_world * self.mesh.polygons[self.ray_faca].center.copy()
+			
+			self.new_obj = self.create(self, context)
+			self.new_obj.matrix_world = self.matrix
+			self.new_obj.location = self.mouseLocation
+		
+		else:
+			self.new_obj = self.create(self, context)
+			self.global_norm = Vector((0.0, 0.0, 1.0))
+			self.global_loc = Vector((0.0, 0.0, 0.0))
+	elif self.mouseState == 1:
+		bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+		self.global_norm = getView(context, event)
+		self.global_loc = self.new_obj.location
+	self.mouseState += 1
+
+
+def RightMouseClick(self, context, event):
+	if ((not self.ray_faca is None) or self.faceComstrain) or (self.global_norm and self.global_loc):
+		if self.mouseState == 0:
+			self.mode = True
+			
+			self.global_norm = self.ray_obj.matrix_world.to_3x3() * self.mesh.polygons[self.ray_faca].normal.copy()
+			self.global_loc = self.ray_obj.matrix_world * self.mesh.polygons[self.ray_faca].center.copy()
+			
+			self.new_obj = self.create(self, context)
+			self.new_obj.matrix_world = self.matrix
+			self.new_obj.location = self.mouseLocation
+			if not self.useOffset is None:
+				n = self.new_obj.matrix_world.to_3x3().inverted() * self.mesh.polygons[self.ray_faca].normal.copy()
+				for i in self.new_obj.data.polygons[self.useOffset].vertices:
+					self.new_obj.data.vertices[i].co = n * 0.0001 + self.new_obj.data.vertices[i].co.copy()
+			if self.stepCount == 2:
+				SetupBool(self, context)
+		elif self.mouseState == 1:
+			bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+			self.global_norm = getView(context, event)
+			self.global_loc = self.new_obj.location
+			if self.stepCount == 3:
+				SetupBool(self, context)
+		self.mouseState += 1
+
+def Cansel(self, context):
+	if not self.mesh is None:
+		if len(self.ray_obj.modifiers) == 1 and self.mode == True:
+			pass
+		elif len(self.ray_obj.modifiers) != 0 and self.mode == False:
+			bpy.data.meshes.remove(self.mesh)
+	
+	if self.mouseState > 0 and not self.mode:
+		bpy.data.meshes.remove(self.new_obj.data)
+		bpy.data.objects.remove(self.new_obj)
+	
+	
+	
+	elif self.mouseState > 0 and self.mode:
+		bpy.data.meshes.remove(self.new_obj.data)
+		bpy.data.objects.remove(self.new_obj)
+		self.ray_obj.modifiers.remove(self.ray_obj.modifiers[-1])
+
+
+def Finish(self, context):
+	if not self.mesh is None:
+		if len(self.ray_obj.modifiers) == 1 and self.mode == True:
+			pass
+		elif len(self.ray_obj.modifiers) != 0 and self.mode == False:
+			bpy.data.meshes.remove(self.mesh)
+	if self.mode:
+		ApplyBool(self, context)
+	
+	else:
+		pass
