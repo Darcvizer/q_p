@@ -151,7 +151,7 @@ class SCylinder(SObj):
 		self.moveStep2 = faceMove
 		self.useBool = True
 		self.help = DrawHelp
-		self.segment = 32
+		self.segment = bpy.context.user_preferences.addons.get("q_p").preferences.Cylinder
 		self.useOffset = self.segment + 1
 		self.firstPosition = None
 		self.dist = None

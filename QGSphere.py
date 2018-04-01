@@ -95,7 +95,7 @@ class SGSphere(SObj):
 		self.moveStep1 = Scale
 		self.useBool = True
 		self.help = DrawHelp
-		self.segment = 4
+		self.segment = bpy.context.user_preferences.addons.get("q_p").preferences.GSphere
 		self.firstPosition = None
 
 

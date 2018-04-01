@@ -112,6 +112,6 @@ class SCircle(SObj):
 		self.help = DrawHelp
 		self.useOffset = None
 		self.fill = True
-		self.segment = 32
+		self.segment = bpy.context.user_preferences.addons.get("q_p").preferences.Circle
 		self.firstPosition = None
 

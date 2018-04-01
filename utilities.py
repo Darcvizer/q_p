@@ -29,21 +29,21 @@ def draw_circle_2d(color, point, r, num_segments):
 def draw_callback_px(self, context):
 	# draw poly
 	
-	if len(self.panel_points) == 0 or self.mouseState > 0:
-		return 0
-	if self.faceComstrain:
-		bgl.glColor4f(0.0, 1.0, 0.2, 0.15)
-	else:
-		bgl.glColor4f(1.0, 0.085, 0.0, 0.3)
-
-	bgl.glEnable(bgl.GL_BLEND)
-	bgl.glBegin(bgl.GL_TRIANGLES)
-	for i in range(len(self.panel_points)):
-		vec = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data , self.panel_points[i])
-		bgl.glVertex2f(vec[0], vec[1])
-		#glVertex3f(*self.panel_points[i])
+	if len(self.panel_points) != 0 or self.mouseState == 0:
+		
+		if self.faceComstrain:
+			bgl.glColor4f(0.0, 1.0, 0.2, 0.15)
+		else:
+			bgl.glColor4f(1.0, 0.085, 0.0, 0.3)
 	
-	bgl.glEnd()
+		bgl.glEnable(bgl.GL_BLEND)
+		bgl.glBegin(bgl.GL_TRIANGLES)
+		for i in range(len(self.panel_points)):
+			vec = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data , self.panel_points[i])
+			bgl.glVertex2f(vec[0], vec[1])
+			#glVertex3f(*self.panel_points[i])
+		bgl.glEnd()
+		
 	v3 = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data , self.mouseLocation)
 	draw_circle_2d((0.0, 1.0, 0.0, 0.6), v3, 3, 12)
 	
@@ -254,23 +254,26 @@ def RayCast(self, context, event, ray_max=1000.0, snap=False):
 					best_matrix = matrix
 					best_face = face_index
 					best_hit = hit
+					
 					if self.mesh is None:
-						if len(best_obj.modifiers) == 0:
+							if len(best_obj.modifiers) == 0:
+								self.mesh = best_obj.data
+							else:
+								name = best_obj.name + 'GegaSosok'
+								self.mesh = best_obj.to_mesh(context.scene, apply_modifiers=True, settings='PREVIEW',calc_tessface=False, calc_undeformed=False)
+								self.mesh.name = name
+								
+					elif self.mesh.name != best_obj.data.name + 'GegaSosok' or self.mesh.name != best_obj.data.name:
+						if len(best_obj.modifiers) == 0 or best_obj.name == self.boolName:
+							if self.mesh.users == 0:
+								bpy.data.meshes.remove(self.mesh)
 							self.mesh = best_obj.data
 						else:
+							if self.mesh.users == 0:
+								bpy.data.meshes.remove(self.mesh)
 							name = best_obj.name + 'GegaSosok'
 							self.mesh = best_obj.to_mesh(context.scene, apply_modifiers=True, settings='PREVIEW',calc_tessface=False, calc_undeformed=False)
 							self.mesh.name = name
-					elif self.mesh.name != best_obj.data.name + 'GegaSosok':
-						if len(best_obj.modifiers) == 0:
-							if len(self.ray_obj.modifiers)!=0:
-								bpy.data.meshes.remove(self.mesh)
-							self.mesh = best_obj.data
-						else:
-							if len(self.ray_obj.modifiers)!=0:
-								bpy.data.meshes.remove(self.mesh)
-							name = best_obj.name + 'GegaSosok'
-							self.mesh = best_obj.to_mesh(context.scene, apply_modifiers=True, settings='PREVIEW',calc_tessface=False, calc_undeformed=False)
 					break
 								
 					
@@ -368,6 +371,7 @@ def SetupBool(self, context):
 			i.show_viewport = False
 
 	bpy.context.scene.objects.active = self.ray_obj
+	self.boolName = self.ray_obj.name
 	bpy.ops.object.modifier_add(type='BOOLEAN')
 	self.ray_obj.modifiers[-1].operation = 'DIFFERENCE'
 	self.ray_obj.modifiers[-1].object = self.new_obj
@@ -467,7 +471,9 @@ def FlipNormal():
 
 
 def FirstState(self, context, event):
-	if not self.faceComstrain:
+	if self.faceComstrain and event.ctrl:
+		self.mouseLocation = RayCast(self, context, event, ray_max=1000.0, snap=True)[2]
+	elif not self.faceComstrain:
 		if event.ctrl:
 			self.ray_faca, self.ray_obj, self.mouseLocation, self.dir_longest_edge = RayCast(self, context, event,
 			                                                                                 ray_max=1000.0, snap=True)
@@ -590,7 +596,7 @@ def Cansel(self, context):
 
 
 def Finish(self, context):
-	if not self.mesh is None:
+	if not self.mesh is None and not self.ray_obj is None:
 		if len(self.ray_obj.modifiers) == 1 and self.mode == True:
 			pass
 		elif len(self.ray_obj.modifiers) != 0 and self.mode == False:

@@ -5,6 +5,7 @@ class SObj(bpy.types.Operator):
 	bl_idname = "objects.stream_obj"
 	bl_label = "Stream Obj"
 	bl_options = {"REGISTER", "UNDO", "GRAB_CURSOR", "BLOCKING"}
+	
 	def __init__(self):
 		######################################
 		self.viewState = None
@@ -29,6 +30,7 @@ class SObj(bpy.types.Operator):
 		self.mouseLocation = None
 		self.matrix = None
 		self.mesh = None
+		self.boolName = "GegaSosok"
 		########################
 		self.stepCount = None
 		self.create = None
@@ -100,13 +102,13 @@ class SObj(bpy.types.Operator):
 					
 		if event.type == 'WHEELUPMOUSE' and not self.segment is None :
 				self.segment += 1
-				Scale(self, context)
+				self.moveStep1(self, context)
 
 
 		if event.type == 'WHEELDOWNMOUSE' and not self.segment is None :
 			if not self.segment >= 3:
 				self.segment -= 1
-				Scale(self, context)
+				self.moveStep1(self, context)
 				
 				
 		if event.type == 'LEFTMOUSE' and ((self.mode == False or self.mouseState == 0) or (self.mode == True and self.mouseState == 2)):

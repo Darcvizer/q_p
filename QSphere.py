@@ -93,7 +93,7 @@ class SSphere(SObj):
 		self.moveStep1 = Scale
 		self.useBool = True
 		self.help = DrawHelp
-		self.segment = 32
+		self.segment = bpy.context.user_preferences.addons.get("q_p").preferences.Sphere
 		self.firstPosition = None
 
 
