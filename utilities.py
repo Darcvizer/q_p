@@ -43,9 +43,13 @@ def draw_callback_px(self, context):
 			bgl.glVertex2f(vec[0], vec[1])
 			#glVertex3f(*self.panel_points[i])
 		bgl.glEnd()
+	if self.point is None:
+		v3 = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data , self.mouseLocation)
+	else:
+		v3 = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, self.point)
 		
-	v3 = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data , self.mouseLocation)
 	draw_circle_2d((0.0, 1.0, 0.0, 0.6), v3, 3, 12)
+	self.point = None
 	
 	# restore opengl defaults
 	bgl.glLineWidth(1)
@@ -398,8 +402,13 @@ def ApplyBool(self, context):
 	bpy.data.scenes['Scene'].tool_settings.use_mesh_automerge = self.auto_merge
 	bpy.data.meshes.remove(self.new_obj.data)
 	#bpy.context.scene.objects.unlink(self.new_obj)
-	bpy.data.objects.remove(self.new_obj)
-
+	#bpy.data.objects.remove(self.new_obj)
+	bpy.ops.object.delete(use_global=True)
+	if len(self.ray_obj.modifiers) > 0:
+		if self.ray_obj.modifiers[-1].type == 'BOOLEAN':
+			if self.ray_obj.modifiers[-1].object is None:
+				bpy.ops.object.modifier_remove(modifier=self.ray_obj.modifiers[-1].name)
+			
 	if self.edit_mode_obj:
 		bpy.context.scene.objects.active = self.edit_mode_obj
 		bpy.ops.object.mode_set(mode='EDIT')
@@ -472,7 +481,14 @@ def FlipNormal():
 
 def FirstState(self, context, event):
 	if self.faceComstrain and event.ctrl:
-		self.mouseLocation = RayCast(self, context, event, ray_max=1000.0, snap=True)[2]
+		self.point = RayCast(self, context, event, ray_max=1000.0, snap=True)[2]
+		if self.point is None:
+			self.mouseLocation = get_pos3d(self, context, event, self.global_loc, self.global_norm)
+		else:
+			point = intersect_line_plane(self.point, self.point + self.global_norm * 300,self.global_loc,self.global_norm)
+			if point is None:
+				self.point= intersect_line_plane(self.point, self.point + self.global_norm * 300, self.global_loc, self.global_norm, True)
+			self.mouseLocation = point
 	elif not self.faceComstrain:
 		if event.ctrl:
 			self.ray_faca, self.ray_obj, self.mouseLocation, self.dir_longest_edge = RayCast(self, context, event,
@@ -578,31 +594,31 @@ def RightMouseClick(self, context, event):
 
 def Cansel(self, context):
 	if not self.mesh is None:
-		if len(self.ray_obj.modifiers) == 1 and self.mode == True:
-			pass
-		elif len(self.ray_obj.modifiers) != 0 and self.mode == False:
+		if self.mesh.users == 0:
 			bpy.data.meshes.remove(self.mesh)
 	
 	if self.mouseState > 0 and not self.mode:
 		bpy.data.meshes.remove(self.new_obj.data)
-		bpy.data.objects.remove(self.new_obj)
+		#bpy.data.objects.remove(self.new_obj)
+		bpy.ops.object.delete(use_global=True)
+		
 	
 	
 	
 	elif self.mouseState > 0 and self.mode:
 		bpy.data.meshes.remove(self.new_obj.data)
-		bpy.data.objects.remove(self.new_obj)
+		#bpy.data.objects.remove(self.new_obj)
+		bpy.ops.object.delete(use_global=True)
 		self.ray_obj.modifiers.remove(self.ray_obj.modifiers[-1])
 
 
 def Finish(self, context):
-	if not self.mesh is None and not self.ray_obj is None:
-		if len(self.ray_obj.modifiers) == 1 and self.mode == True:
-			pass
-		elif len(self.ray_obj.modifiers) != 0 and self.mode == False:
+	
+	if not self.mesh is None:
+		if self.mesh.users == 0:
 			bpy.data.meshes.remove(self.mesh)
 	if self.mode:
 		ApplyBool(self, context)
-	
 	else:
-		pass
+		bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+		

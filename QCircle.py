@@ -35,9 +35,12 @@ def Scale(self, pasS=True):
 	if self.mouseLocation:
 		loc = self.mouseLocation
 		dist = (self.firstPosition-loc).length
+		if dist == 0.0:
+			dist = 0.0001
 		
 		bpy.data.meshes.remove(self.new_obj.data)
-		bpy.data.objects.remove(self.new_obj)
+		#bpy.data.objects.remove(self.new_obj)
+		bpy.ops.object.delete(use_global=True)
 	
 		if self.view:
 			if self.fill:
@@ -96,7 +99,7 @@ def DrawHelp(self, context, event):
 	else:
 		str += pf
 	
-	return str + 'segments (' + self.segment.__str__() + ')'
+	return str + 'Wheel: Add and Sub Segment' + '(' + self.segment.__str__() + ')'
 
 
 class SCircle(SObj):

@@ -31,6 +31,8 @@ class SObj(bpy.types.Operator):
 		self.matrix = None
 		self.mesh = None
 		self.boolName = "GegaSosok"
+		self.point = None
+		
 		########################
 		self.stepCount = None
 		self.create = None
@@ -44,6 +46,8 @@ class SObj(bpy.types.Operator):
 		
 		self.fill = None
 		self.segment = None
+		
+		self.tag = None
 		
 		######################################
 		# user setings
@@ -100,15 +104,23 @@ class SObj(bpy.types.Operator):
 				else:
 					self.faceComstrain = False
 					
-		if event.type == 'WHEELUPMOUSE' and not self.segment is None :
+		if (event.type == 'WHEELUPMOUSE') and not self.segment is None :
+			if self.mouseState > 0:
 				self.segment += 1
 				self.moveStep1(self, context)
+		#elif event.type == 'WHEELUPMOUSE':
+		#	return {'PASS_THROUGH'}
+		
 
 
-		if event.type == 'WHEELDOWNMOUSE' and not self.segment is None :
-			if not self.segment >= 3:
-				self.segment -= 1
-				self.moveStep1(self, context)
+		if (event.type == 'WHEELDOWNMOUSE') and not self.segment is None :
+			if self.mouseState > 0:
+				if not self.segment <= 4:
+					self.segment -= 1
+					self.moveStep1(self, context)
+		#elif event.type == 'WHEELDOWNMOUSE':
+			#return {'PASS_THROUGH'}
+			
 				
 				
 		if event.type == 'LEFTMOUSE' and ((self.mode == False or self.mouseState == 0) or (self.mode == True and self.mouseState == 2)):

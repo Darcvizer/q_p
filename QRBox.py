@@ -4,7 +4,6 @@ import bgl
 from bgl import glVertex3f
 from mathutils import Vector, Matrix
 from bpy_extras import view3d_utils
-from mathutils import bvhtree
 import numpy as np
 from mathutils.geometry import intersect_line_plane
 from mathutils.geometry import tessellate_polygon as tessellate
@@ -12,13 +11,16 @@ from .utilities import *
 from .main import *
 
 
-def CreateSphere(self, context):
-	if self.view:
-		bpy.ops.mesh.primitive_ico_sphere_add(view_align=True, subdivisions=4, size=0.0001)
+def CreateBox(self, context):
+	"""create new obj"""
+	if self.viewState:
+		bpy.ops.mesh.primitive_round_cube_add(view_align=True, radius=0.0001, arc_div=4, lin_div=0, div_type='CORNERS')
 	else:
-		bpy.ops.mesh.primitive_ico_sphere_add(view_align=False, subdivisions=4, size=0.0001)
-	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+		bpy.ops.mesh.primitive_round_cube_add(view_align=False, radius=0.0001, arc_div=4, lin_div=0, div_type='CORNERS')
 	new = context.active_object
+	new.scale = Vector((0.00001, 0.00001, 0.00001))
+	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+	
 	if not self.firstPosition is None:
 		new.location = self.firstPosition
 	else:
@@ -33,12 +35,13 @@ def Scale(self, pasS=True):
 		dist = (self.firstPosition - loc).length
 		
 		bpy.data.meshes.remove(self.new_obj.data)
-		#bpy.data.objects.remove(self.new_obj)
+		# bpy.data.objects.remove(self.new_obj)
 		bpy.ops.object.delete(use_global=True)
 		if self.view:
-			bpy.ops.mesh.primitive_ico_sphere_add(view_align=True, subdivisions=self.segment)#, size=0.0001)
+			bpy.ops.mesh.primitive_round_cube_add(view_align=True, radius=dist, arc_div=4, lin_div=0, div_type='CORNERS')
+		
 		else:
-			bpy.ops.mesh.primitive_ico_sphere_add(view_align=True, subdivisions=self.segment)#, size=0.0001)
+			bpy.ops.mesh.primitive_round_cube_add(view_align=False, radius=dist, arc_div=4, lin_div=0,div_type='CORNERS')
 		bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 		self.new_obj = bpy.context.active_object
 		
@@ -47,15 +50,16 @@ def Scale(self, pasS=True):
 		
 		self.new_obj.location = self.firstPosition
 		
-		self.new_obj.scale[0] = dist
-		self.new_obj.scale[1] = dist
-		self.new_obj.scale[2] = dist
+		#self.new_obj.dimensions[0] = dist
+		#self.new_obj.dimensions[1] = dist
+		#self.new_obj.dimensions[2] = dist
 		
 		if self.mode:
 			self.new_obj.draw_type = 'WIRE'
 			self.ray_obj.modifiers[-1].object = self.new_obj
 
 
+		
 def DrawHelp(self, context, event):
 	bo = 'RMB(On): Boolean, '
 	bf = 'RMB(Off): Boolean, '
@@ -80,25 +84,21 @@ def DrawHelp(self, context, event):
 	else:
 		str += sf
 	
-	
 	return str + 'Wheel: Add and Sub Segment' + '(' + self.segment.__str__() + ')'
 
 
-class SGSphere(SObj):
-	bl_idname = "objects.stream_ico_sphere"
-	bl_label = "Stream Ico Sphere"
+class SRBox(SObj):
+	bl_idname = "objects.stream_round_box"
+	bl_label = "Stream Round Box"
 	bl_options = {"REGISTER", "UNDO", "GRAB_CURSOR", "BLOCKING"}
-	
 	def __init__(self):
-		super(SGSphere, self).__init__()
+		super(SRBox,self).__init__()
 		self.stepCount = 2
-		self.create = CreateSphere
+		self.create = CreateBox
 		self.moveStep1 = Scale
 		self.useBool = True
 		self.help = DrawHelp
-		self.segment = bpy.context.user_preferences.addons.get("q_p").preferences.GSphere
+		self.segment = 4
 		self.firstPosition = None
-
-
 
 

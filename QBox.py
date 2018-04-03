@@ -15,17 +15,15 @@ def CreateBox(self, context):
 	"""create new obj"""
 	if self.viewState:
 		bpy.ops.mesh.primitive_cube_add(view_align=True)
-		new = context.active_object
-		new.scale = Vector((0.00001, 0.00001, 0.00001))
 	else:
 		bpy.ops.mesh.primitive_cube_add(view_align=False)
-		new = context.active_object
-		new.scale = Vector((0.00001, 0.00001, 0.00001))
-		bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-		new.location = self.mouseLocation
-		org = new.data.vertices[6].co.copy()
-		new.data.transform(Matrix.Translation(-org))
-		new.location += org
+	new = context.active_object
+	new.scale = Vector((0.00001, 0.00001, 0.00001))
+	bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+	new.location = self.mouseLocation
+	org = new.data.vertices[6].co.copy()
+	new.data.transform(Matrix.Translation(-org))
+	new.location += org
 	return new
 
 def MoveVerts(self, compress=False):

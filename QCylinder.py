@@ -31,8 +31,8 @@ def faceMove(self, pasS = True):
 				dvec = v1-v2
 				dnormal = np.dot(dvec, normal)
 				self.new_obj.data.vertices[i].co += Vector(dnormal*normal)
-	
-		self.edglen = self.new_obj.dimensions.copy()
+		
+		self.cap = self.new_obj.data.polygons[self.segment - 2].center.copy()
 
 def CreateCilinder(self, pasS=True):
 	if self.view:
@@ -60,9 +60,12 @@ def Scale(self, pasS=True):
 		if self.mouseState == 1:
 			loc = self.mouseLocation
 			self.dist = (self.firstPosition - loc).length
-		
-		bpy.data.meshes.remove(self.new_obj.data)
-		bpy.data.objects.remove(self.new_obj)
+			if self.dist == 0.0:
+				self.dist = 0.0001
+		if not self.new_obj.data is None:
+			bpy.data.meshes.remove(self.new_obj.data)
+			#bpy.data.objects.remove(self.new_obj)
+			bpy.ops.object.delete(use_global=False)
 		if self.view:
 			bpy.ops.mesh.primitive_cylinder_add(vertices=self.segment, radius=self.dist, depth=2, view_align=True)
 			self.new_obj = bpy.context.active_object
@@ -75,13 +78,17 @@ def Scale(self, pasS=True):
 		else:
 			bpy.ops.mesh.primitive_cylinder_add(vertices=self.segment, radius=self.dist, depth=0.0001, view_align=False)
 			self.new_obj = bpy.context.active_object
-			if self.segment <= 4:
-				org = self.new_obj.data.polygons[4].center.copy()
-			else:
-				org = self.new_obj.data.polygons[self.segment + 1].center.copy()
-				self.new_obj.data.transform(Matrix.Translation(-org))
-				self.new_obj.location = self.firstPosition
-		
+			try:
+				if self.segment <= 4:
+					org = self.new_obj.data.polygons[4].center.copy()
+				else:
+					org = self.new_obj.data.polygons[self.segment + 1].center.copy()
+					self.new_obj.data.transform(Matrix.Translation(-org))
+					self.new_obj.location = self.firstPosition
+			except IndexError:
+				bpy.data.meshes.remove(self.new_obj.data)
+				bpy.ops.object.delete(use_global=False)
+				return
 		
 		if self.matrix is not None and not self.ray_faca is None:
 			self.new_obj.matrix_world = self.matrix
@@ -90,7 +97,7 @@ def Scale(self, pasS=True):
 		if self.mode:
 			if not self.ray_obj is None and self.mode:
 				n = self.new_obj.matrix_world.to_3x3().inverted() * self.mesh.polygons[self.ray_faca].normal.copy()
-				for i in self.new_obj.data.polygons[self.useOffset].vertices:
+				for i in self.new_obj.data.polygons[self.segment+1].vertices:
 					self.new_obj.data.vertices[i].co = n * 0.0001 + self.new_obj.data.vertices[i].co.copy()
 			if len(self.ray_obj.modifiers)  == 0:
 				bpy.context.scene.objects.active = self.ray_obj
@@ -110,7 +117,13 @@ def Scale(self, pasS=True):
 				self.new_obj.draw_type = 'WIRE'
 				self.ray_obj.modifiers[-1].object = self.new_obj
 		if self.mouseState > 1:
-			faceMove(self, pasS=True)
+			s = Vector((0.0, 0.0, 0.0))
+			l = len(self.new_obj.data.polygons[self.segment - 2].vertices)
+			for i in self.new_obj.data.polygons[self.segment - 2].vertices:
+				s = self.new_obj.data.vertices[i].co.copy() + s
+			for i in self.new_obj.data.polygons[self.segment - 2].vertices:
+				self.new_obj.data.vertices[i].co = self.new_obj.data.vertices[i].co.copy() - s / l + self.cap
+
 
 	
 
@@ -138,7 +151,10 @@ def DrawHelp(self, context, event):
 	else:
 		str += sf
 	
-	return str + ', Segments(' + self.segment.__str__() + ')'
+	str += 'Wheel: Add and Sub Segment' + '(' + self.segment.__str__() + ')'
+	
+	
+	return str
 class SCylinder(SObj):
 	bl_idname = "objects.stream_cylinder"
 	bl_label = "Stream Cylinder"
@@ -155,4 +171,5 @@ class SCylinder(SObj):
 		self.useOffset = self.segment + 1
 		self.firstPosition = None
 		self.dist = None
-		self.edglen = None
+		self.cap = None
+		self.tag = 'Cylinder'

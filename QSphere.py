@@ -33,7 +33,8 @@ def Scale(self, pasS=True):
 		dist = (self.firstPosition-loc).length
 	
 		bpy.data.meshes.remove(self.new_obj.data)
-		bpy.data.objects.remove(self.new_obj)
+		#bpy.data.objects.remove(self.new_obj)
+		bpy.ops.object.delete(use_global=True)
 		if self.view:
 			bpy.ops.mesh.primitive_uv_sphere_add(view_align=True, segments=self.segment, ring_count=self.segment)
 		else:
@@ -79,7 +80,7 @@ def DrawHelp(self, context, event):
 	else:
 		str += sf
 	
-	return str + ', Segments(' + self.segment.__str__() + ')'
+	return str + 'Wheel: Add and Sub Segment' + '(' + self.segment.__str__() + ')'
 
 
 class SSphere(SObj):

@@ -22,7 +22,8 @@ from . import (
 		QPlane,
 		QGSphere,
 		QCircle,
-		QEmpty
+		QEmpty,
+		QRBox
 		)
 # Spawn an Nested Pie Menu selection
 
@@ -41,6 +42,10 @@ class VIEW3D_PIE_q_p(Menu):
 		pie.operator("objects.stream_ico_sphere",	text= "Ico Sphere")
 		pie.operator("objects.stream_circle",		text= "Circle")
 		pie.operator("objects.stream_empty",        text= "Empty")
+		try:
+			pie.operator("objects.stream_round_box", text="Round Box")
+		except:
+			pass
 		
 		#pie.operator("objects.stream_empty",        text="DrawPoly (KTools)")
 		
@@ -61,17 +66,17 @@ class AddonPreferencesQP(bpy.types.AddonPreferences):
 	Cylinder = IntProperty(
 		name="Cylinder Default Sigments",
 		default=32,
-		min = 3
+		min = 4
 	)
 	Circle = IntProperty(
 		name="Circle Default Sigments",
 		default=32,
-		min=3,
+		min=4,
 	)
 	Sphere = IntProperty(
 		name="UV Sphere Default Sigments",
 		default=32,
-		min=3,
+		min=4,
 	)
 	GSphere = IntProperty(
 		name="Ico Sphere Default Sigments",
@@ -97,6 +102,10 @@ def register():
 	bpy.utils.register_class(QGSphere.SGSphere)
 	bpy.utils.register_class(QCircle.SCircle)
 	bpy.utils.register_class(QEmpty.SEmpty)
+	try:
+		bpy.utils.register_class(QRBox.SRBox)
+	except:
+		pass
 	bpy.utils.register_class(AddonPreferencesQP)
 	wm = bpy.context.window_manager
 	km = wm.keyconfigs.addon.keymaps.new(name="3D View Generic", space_type = "VIEW_3D")
@@ -111,6 +120,10 @@ def unregister():
 	bpy.utils.unregister_class(QGSphere.SGSphere)
 	bpy.utils.unregister_class(QCircle.SCircle)
 	bpy.utils.unregister_class(QEmpty.SEmpty)
+	try:
+		bpy.utils.unregister_class(QRBox.SRBox)
+	except:
+		pass
 	bpy.utils.unregister_class(AddonPreferencesQP)
 
 if __name__ == "__main__":
